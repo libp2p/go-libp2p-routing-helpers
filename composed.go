@@ -76,6 +76,9 @@ func (cr *Compose) FindPeer(ctx context.Context, p peer.ID) (pstore.PeerInfo, er
 
 // GetPublicKey returns the public key for the given peer.
 func (cr *Compose) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error) {
+	if cr.ValueStore == nil {
+		return nil, routing.ErrNotFound
+	}
 	return routing.GetPublicKey(cr.ValueStore, ctx, p)
 }
 

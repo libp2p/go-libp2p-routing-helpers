@@ -2,7 +2,10 @@ package routinghelpers
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	errwrap "github.com/hashicorp/errwrap"
 )
 
 type bootstrapRouter struct {
@@ -50,6 +53,11 @@ func TestBootstrap(t *testing.T) {
 				Namespaces: []string{"allow1", "allow2", "notsupported", "error"},
 			},
 		},
+		&Compose{
+			ValueStore: &LimitedValueStore{
+				ValueStore: &dummyValueStore{},
+			},
+		},
 		Null{},
 		&Compose{},
 		&Compose{
@@ -74,6 +82,61 @@ func TestBootstrap(t *testing.T) {
 	for i, p := range pings {
 		if !p {
 			t.Errorf("pings %d not seen", i)
+		}
+	}
+
+}
+func TestBootstrapErr(t *testing.T) {
+	d := Parallel{
+		Tiered{
+			&bootstrapRouter{
+				bs: func() error {
+					return errors.New("err1")
+				},
+			},
+		},
+		Tiered{
+			&bootstrapRouter{
+				bs: func() error {
+					return nil
+				},
+			},
+			&bootstrapRouter{
+				bs: func() error {
+					return nil
+				},
+			},
+		},
+		&Compose{
+			ValueStore: &LimitedValueStore{
+				ValueStore: &bootstrapRouter{
+					bs: func() error {
+						return errors.New("err2")
+					},
+				},
+				Namespaces: []string{"allow1", "allow2", "notsupported", "error"},
+			},
+		},
+		&Compose{
+			ValueStore: &bootstrapRouter{
+				bs: func() error {
+					return errors.New("err3")
+				},
+			},
+			ContentRouting: &bootstrapRouter{
+				bs: func() error {
+					return errors.New("err4")
+				},
+			},
+		},
+		Null{},
+	}
+	ctx := context.Background()
+	err := d.Bootstrap(ctx)
+	t.Log(err)
+	for _, s := range []string{"err1", "err2", "err3", "err4"} {
+		if !errwrap.Contains(err, s) {
+			t.Errorf("expecting error to contain '%s'", s)
 		}
 	}
 }

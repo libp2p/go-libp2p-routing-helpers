@@ -27,6 +27,7 @@ func TestTieredGet(t *testing.T) {
 			PeerRouting:    Null{},
 		},
 		Null{},
+		&Compose{},
 	}
 	ctx := context.Background()
 	if err := d[1].PutValue(ctx, "k1", []byte("v1")); err != nil {
@@ -79,5 +80,12 @@ func TestTieredGet(t *testing.T) {
 		if string(v) != "value" {
 			t.Errorf("expected value, got %s", string(v))
 		}
+	}
+}
+
+func TestTieredNoSupport(t *testing.T) {
+	d := Tiered{Tiered{Null{}}}
+	if _, ok := <-d.FindProvidersAsync(context.Background(), nil, 0); ok {
+		t.Fatal("shouldn't have found a provider")
 	}
 }

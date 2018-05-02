@@ -39,6 +39,14 @@ func TestParallelPutGet(t *testing.T) {
 				Namespaces: []string{"allow1", "error", "solo"},
 			},
 		},
+		Parallel{
+			&struct{ Compose }{},
+		},
+		Tiered{
+			&struct{ Compose }{},
+		},
+		&struct{ Parallel }{},
+		&struct{ Tiered }{},
 	}
 
 	ctx := context.Background()
@@ -46,7 +54,7 @@ func TestParallelPutGet(t *testing.T) {
 	if err := d.PutValue(ctx, "/allow1/hello", []byte("world")); err != nil {
 		t.Fatal(err)
 	}
-	for _, di := range append([]routing.IpfsRouting{d}, d...) {
+	for _, di := range append([]routing.IpfsRouting{d}, d[:3]...) {
 		v, err := di.GetValue(ctx, "/allow1/hello")
 		if err != nil {
 			t.Fatal(err)
@@ -130,7 +138,9 @@ func TestParallelFindProviders(t *testing.T) {
 		},
 		Tiered{
 			&Compose{},
+			&struct{ Compose }{},
 		},
+		&struct{ Compose }{},
 		Null{},
 		Tiered{
 			&Compose{
@@ -263,6 +273,7 @@ func TestParallelFindPeer(t *testing.T) {
 			Null{},
 			Null{},
 		},
+		&struct{ Compose }{},
 		Parallel{
 			&Compose{
 				PeerRouting: dummyPeerRouter{
@@ -289,7 +300,7 @@ func TestParallelFindPeer(t *testing.T) {
 
 	ctx := context.Background()
 
-	for _, di := range append([]routing.IpfsRouting{d}, d[3:]...) {
+	for _, di := range append([]routing.IpfsRouting{d}, d[4:]...) {
 		if _, err := di.FindPeer(ctx, "first"); err != nil {
 			t.Fatal(err)
 		}
@@ -328,6 +339,7 @@ func TestParallelProvide(t *testing.T) {
 			},
 		},
 		Tiered{
+			&struct{ Compose }{},
 			&Compose{},
 			&Compose{},
 		},
