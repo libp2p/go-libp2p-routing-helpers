@@ -25,7 +25,7 @@ func TestParallelPutGet(t *testing.T) {
 				},
 			},
 		},
-		Serial{
+		Tiered{
 			&Compose{
 				ValueStore: &LimitedValueStore{
 					ValueStore: new(dummyValueStore),
@@ -128,11 +128,11 @@ func TestParallelFindProviders(t *testing.T) {
 		Parallel{
 			&Compose{},
 		},
-		Serial{
+		Tiered{
 			&Compose{},
 		},
 		Null{},
-		Serial{
+		Tiered{
 			&Compose{
 				ContentRouting: dummyProvider{
 					cid1.KeyString(): []peer.ID{
@@ -259,7 +259,7 @@ func TestParallelFindPeer(t *testing.T) {
 			Null{},
 			Null{},
 		},
-		Serial{
+		Tiered{
 			Null{},
 			Null{},
 		},
@@ -271,7 +271,7 @@ func TestParallelFindPeer(t *testing.T) {
 				},
 			},
 		},
-		Serial{
+		Tiered{
 			&Compose{
 				PeerRouting: dummyPeerRouter{
 					"first": struct{}{},
@@ -327,7 +327,7 @@ func TestParallelProvide(t *testing.T) {
 				}),
 			},
 		},
-		Serial{
+		Tiered{
 			&Compose{},
 			&Compose{},
 		},

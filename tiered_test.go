@@ -4,11 +4,12 @@ import (
 	"context"
 	"testing"
 
+	errwrap "github.com/hashicorp/errwrap"
 	routing "github.com/libp2p/go-libp2p-routing"
 )
 
-func TestSerialGet(t *testing.T) {
-	d := Serial{
+func TestTieredGet(t *testing.T) {
+	d := Tiered{
 		Null{},
 		&Compose{
 			ValueStore:     new(dummyValueStore),
@@ -61,6 +62,15 @@ func TestSerialGet(t *testing.T) {
 	if err := d.PutValue(ctx, "key", []byte("value")); err != nil {
 		t.Fatal(err)
 	}
+
+	if _, err := d.GetValue(ctx, "/error/myErr"); !errwrap.Contains(err, "myErr") {
+		t.Fatalf("expected error to contain myErr, got: %s", err)
+	}
+
+	if _, err := (Tiered{d[1]}).GetValue(ctx, "/error/myErr"); !errwrap.Contains(err, "myErr") {
+		t.Fatalf("expected error to contain myErr, got: %s", err)
+	}
+
 	for _, di := range append([]routing.IpfsRouting{d}, d[1:len(d)-2]...) {
 		v, err := di.GetValue(ctx, "key")
 		if err != nil {

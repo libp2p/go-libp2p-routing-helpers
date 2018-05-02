@@ -33,7 +33,7 @@ func supportsKey(vs routing.ValueStore, key string) bool {
 			}
 		}
 		return false
-	case Serial:
+	case Tiered:
 		for _, ri := range vs {
 			if supportsKey(ri, key) {
 				return true
@@ -60,7 +60,7 @@ func supportsPeer(vs routing.PeerRouting) bool {
 			}
 		}
 		return false
-	case Serial:
+	case Tiered:
 		for _, ri := range vs {
 			if supportsPeer(ri) {
 				return true
@@ -85,7 +85,7 @@ func supportsContent(vs routing.ContentRouting) bool {
 			}
 		}
 		return false
-	case Serial:
+	case Tiered:
 		for _, ri := range vs {
 			if supportsContent(ri) {
 				return true

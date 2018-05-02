@@ -17,7 +17,7 @@ func (bs *bootstrapRouter) Bootstrap(ctx context.Context) error {
 func TestBootstrap(t *testing.T) {
 	pings := make([]bool, 6)
 	d := Parallel{
-		Serial{
+		Tiered{
 			&bootstrapRouter{
 				bs: func() error {
 					pings[0] = true
@@ -25,7 +25,7 @@ func TestBootstrap(t *testing.T) {
 				},
 			},
 		},
-		Serial{
+		Tiered{
 			&bootstrapRouter{
 				bs: func() error {
 					pings[1] = true

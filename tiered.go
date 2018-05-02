@@ -13,15 +13,15 @@ import (
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 )
 
-// Serial is like the Parallel except that GetValue and FindPeer
+// Tiered is like the Parallel except that GetValue and FindPeer
 // are called in series.
-type Serial []routing.IpfsRouting
+type Tiered []routing.IpfsRouting
 
-func (r Serial) PutValue(ctx context.Context, key string, value []byte, opts ...ropts.Option) error {
+func (r Tiered) PutValue(ctx context.Context, key string, value []byte, opts ...ropts.Option) error {
 	return Parallel(r).PutValue(ctx, key, value, opts...)
 }
 
-func (r Serial) get(ctx context.Context, do func(routing.IpfsRouting) (interface{}, error)) (interface{}, error) {
+func (r Tiered) get(ctx context.Context, do func(routing.IpfsRouting) (interface{}, error)) (interface{}, error) {
 	var errs []error
 	for _, ri := range r {
 		val, err := do(ri)
@@ -46,7 +46,7 @@ func (r Serial) get(ctx context.Context, do func(routing.IpfsRouting) (interface
 	}
 }
 
-func (r Serial) GetValue(ctx context.Context, key string, opts ...ropts.Option) ([]byte, error) {
+func (r Tiered) GetValue(ctx context.Context, key string, opts ...ropts.Option) ([]byte, error) {
 	valInt, err := r.get(ctx, func(ri routing.IpfsRouting) (interface{}, error) {
 		return ri.GetValue(ctx, key, opts...)
 	})
@@ -54,7 +54,7 @@ func (r Serial) GetValue(ctx context.Context, key string, opts ...ropts.Option) 
 	return val, err
 }
 
-func (r Serial) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error) {
+func (r Tiered) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error) {
 	vInt, err := r.get(ctx, func(ri routing.IpfsRouting) (interface{}, error) {
 		return routing.GetPublicKey(ri, ctx, p)
 	})
@@ -62,15 +62,15 @@ func (r Serial) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error) 
 	return val, err
 }
 
-func (r Serial) Provide(ctx context.Context, c *cid.Cid, local bool) error {
+func (r Tiered) Provide(ctx context.Context, c *cid.Cid, local bool) error {
 	return Parallel(r).Provide(ctx, c, local)
 }
 
-func (r Serial) FindProvidersAsync(ctx context.Context, c *cid.Cid, count int) <-chan pstore.PeerInfo {
+func (r Tiered) FindProvidersAsync(ctx context.Context, c *cid.Cid, count int) <-chan pstore.PeerInfo {
 	return Parallel(r).FindProvidersAsync(ctx, c, count)
 }
 
-func (r Serial) FindPeer(ctx context.Context, p peer.ID) (pstore.PeerInfo, error) {
+func (r Tiered) FindPeer(ctx context.Context, p peer.ID) (pstore.PeerInfo, error) {
 	valInt, err := r.get(ctx, func(ri routing.IpfsRouting) (interface{}, error) {
 		return ri.FindPeer(ctx, p)
 	})
@@ -78,8 +78,8 @@ func (r Serial) FindPeer(ctx context.Context, p peer.ID) (pstore.PeerInfo, error
 	return val, err
 }
 
-func (r Serial) Bootstrap(ctx context.Context) error {
+func (r Tiered) Bootstrap(ctx context.Context) error {
 	return Parallel(r).Bootstrap(ctx)
 }
 
-var _ routing.IpfsRouting = (Serial)(nil)
+var _ routing.IpfsRouting = (Tiered)(nil)

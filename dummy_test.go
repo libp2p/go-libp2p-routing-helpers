@@ -27,6 +27,9 @@ func (d *dummyValueStore) PutValue(ctx context.Context, key string, value []byte
 }
 
 func (d *dummyValueStore) GetValue(ctx context.Context, key string, opts ...ropts.Option) ([]byte, error) {
+	if strings.HasPrefix(key, "/error/") {
+		return nil, errors.New(key[len("/error/"):])
+	}
 	if v, ok := (*sync.Map)(d).Load(key); ok {
 		return v.([]byte), nil
 	}
