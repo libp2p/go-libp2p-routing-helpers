@@ -272,7 +272,7 @@ func (r Parallel) FindProvidersAsync(ctx context.Context, c *cid.Cid, count int)
 		return r[0].FindProvidersAsync(ctx, c, count)
 	}
 
-	out := make(chan pstore.PeerInfo, count)
+	out := make(chan pstore.PeerInfo)
 
 	ctx, cancel := context.WithCancel(ctx)
 
