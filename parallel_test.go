@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	errwrap "github.com/hashicorp/errwrap"
 	cid "github.com/ipfs/go-cid"
@@ -36,7 +37,7 @@ func TestParallelPutGet(t *testing.T) {
 		&Compose{
 			ValueStore: &LimitedValueStore{
 				ValueStore: new(dummyValueStore),
-				Namespaces: []string{"allow1", "error", "solo"},
+				Namespaces: []string{"allow1", "error", "solo", "stall"},
 			},
 		},
 		Parallel{
@@ -49,7 +50,8 @@ func TestParallelPutGet(t *testing.T) {
 		&struct{ Tiered }{},
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	if err := d.PutValue(ctx, "/allow1/hello", []byte("world")); err != nil {
 		t.Fatal(err)
@@ -92,6 +94,9 @@ func TestParallelPutGet(t *testing.T) {
 	if err := d.PutValue(ctx, "/error/myErr", []byte("world")); !errwrap.Contains(err, "myErr") {
 		t.Fatalf("expected error to contain myErr, got: %s", err)
 	}
+	if _, err := d.GetValue(ctx, "/error/myErr"); !errwrap.Contains(err, "myErr") {
+		t.Fatalf("expected error to contain myErr, got: %s", err)
+	}
 	if err := d.PutValue(ctx, "/solo/thing", []byte("value")); err != nil {
 		t.Fatal(err)
 	}
@@ -102,6 +107,18 @@ func TestParallelPutGet(t *testing.T) {
 	if string(v) != "value" {
 		t.Fatalf("expected 'value', got '%s'", string(v))
 	}
+
+	ctxt, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	if _, err := d.GetValue(ctxt, "/stall/bla"); err != context.DeadlineExceeded {
+		t.Error(err)
+	}
+	cancel()
+
+	ctxt, cancel = context.WithTimeout(ctx, 10*time.Millisecond)
+	if err := d.PutValue(ctxt, "/stall/bla", []byte("bla")); err != context.DeadlineExceeded {
+		t.Error(err)
+	}
+	cancel()
 }
 
 func TestBasicParallelFindProviders(t *testing.T) {
@@ -131,6 +148,7 @@ func TestParallelFindProviders(t *testing.T) {
 	cid2, _ := prefix.Sum([]byte("bar"))
 	cid3, _ := prefix.Sum([]byte("baz"))
 	cid4, _ := prefix.Sum([]byte("none"))
+	cid5, _ := prefix.Sum([]byte("stall"))
 
 	d := Parallel{
 		Parallel{
@@ -157,6 +175,11 @@ func TestParallelFindProviders(t *testing.T) {
 						"fourth",
 						"fifth",
 						"sixth",
+					},
+					cid5.KeyString(): []peer.ID{
+						"before",
+						"stall",
+						"after",
 					},
 				},
 			},
@@ -252,6 +275,24 @@ func TestParallelFindProviders(t *testing.T) {
 		if _, ok := <-d.FindProvidersAsync(ctx, cid1, 0); ok {
 			t.Fatalf("should have found no CIDs")
 		}
+
+		ctxt, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+		stallCh := d.FindProvidersAsync(ctxt, cid5, 5)
+		if v := <-stallCh; v.ID != "before" {
+			t.Fatal("expected peer 'before'")
+		}
+		if _, ok := <-stallCh; ok {
+			t.Fatal("expected stall and close")
+		}
+		cancel()
+
+		ctxt, cancel = context.WithTimeout(ctx, 10*time.Millisecond)
+		stallCh = d.FindProvidersAsync(ctxt, cid1, 10)
+		time.Sleep(100 * time.Millisecond)
+		if _, ok := <-stallCh; ok {
+			t.Fatal("expected channel to have been closed")
+		}
+		cancel()
 
 		// Now to test many content routers
 		for i := 0; i < 30; i++ {

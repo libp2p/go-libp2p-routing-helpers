@@ -22,6 +22,10 @@ func (d *dummyValueStore) PutValue(ctx context.Context, key string, value []byte
 	if strings.HasPrefix(key, "/error/") {
 		return errors.New(key[len("/error/"):])
 	}
+	if strings.HasPrefix(key, "/stall/") {
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	(*sync.Map)(d).Store(key, value)
 	return nil
 }
@@ -29,6 +33,10 @@ func (d *dummyValueStore) PutValue(ctx context.Context, key string, value []byte
 func (d *dummyValueStore) GetValue(ctx context.Context, key string, opts ...ropts.Option) ([]byte, error) {
 	if strings.HasPrefix(key, "/error/") {
 		return nil, errors.New(key[len("/error/"):])
+	}
+	if strings.HasPrefix(key, "/stall/") {
+		<-ctx.Done()
+		return nil, ctx.Err()
 	}
 	if v, ok := (*sync.Map)(d).Load(key); ok {
 		return v.([]byte), nil
@@ -43,11 +51,20 @@ func (d dummyProvider) FindProvidersAsync(ctx context.Context, c *cid.Cid, count
 	if len(peers) > count {
 		peers = peers[:count]
 	}
-	out := make(chan pstore.PeerInfo, len(peers))
-	for _, p := range peers {
-		out <- pstore.PeerInfo{ID: p}
-	}
-	close(out)
+	out := make(chan pstore.PeerInfo)
+	go func() {
+		defer close(out)
+		for _, p := range peers {
+			if p == "stall" {
+				<-ctx.Done()
+				return
+			}
+			select {
+			case out <- pstore.PeerInfo{ID: p}:
+			case <-ctx.Done():
+			}
+		}
+	}()
 	return out
 }
 
