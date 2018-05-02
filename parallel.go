@@ -25,7 +25,7 @@ func supportsKey(vs routing.ValueStore, key string) bool {
 	case Null:
 		return false
 	case *Compose:
-		return supportsKey(vs.ValueStore, key)
+		return vs.ValueStore != nil && supportsKey(vs.ValueStore, key)
 	case Parallel:
 		for _, ri := range vs {
 			if supportsKey(ri, key) {
@@ -52,7 +52,7 @@ func supportsPeer(vs routing.PeerRouting) bool {
 	case Null:
 		return false
 	case *Compose:
-		return supportsPeer(vs.PeerRouting)
+		return vs.PeerRouting != nil && supportsPeer(vs.PeerRouting)
 	case Parallel:
 		for _, ri := range vs {
 			if supportsPeer(ri) {
@@ -77,7 +77,7 @@ func supportsContent(vs routing.ContentRouting) bool {
 	case Null:
 		return false
 	case *Compose:
-		return supportsContent(vs.ContentRouting)
+		return vs.ContentRouting != nil && supportsContent(vs.ContentRouting)
 	case Parallel:
 		for _, ri := range vs {
 			if supportsContent(ri) {

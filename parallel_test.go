@@ -2,6 +2,7 @@ package routinghelpers
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	errwrap "github.com/hashicorp/errwrap"
@@ -11,18 +12,25 @@ import (
 	mh "github.com/multiformats/go-multihash"
 )
 
+// NOTE: While this test is primarily testing the Parallel combinator, it also
+// mixes and matches other combiners for better coverage. Please don't simplify.
+
 func TestParallelPutGet(t *testing.T) {
 	d := Parallel{
-		&Compose{
-			ValueStore: &LimitedValueStore{
-				ValueStore: new(dummyValueStore),
-				Namespaces: []string{"allow1", "allow2", "notsupported"},
+		Parallel{
+			&Compose{
+				ValueStore: &LimitedValueStore{
+					ValueStore: new(dummyValueStore),
+					Namespaces: []string{"allow1", "allow2", "notsupported"},
+				},
 			},
 		},
-		&Compose{
-			ValueStore: &LimitedValueStore{
-				ValueStore: new(dummyValueStore),
-				Namespaces: []string{"allow1", "allow2", "notsupported", "error"},
+		Serial{
+			&Compose{
+				ValueStore: &LimitedValueStore{
+					ValueStore: new(dummyValueStore),
+					Namespaces: []string{"allow1", "allow2", "notsupported", "error"},
+				},
 			},
 		},
 		&Compose{
@@ -117,10 +125,16 @@ func TestParallelFindProviders(t *testing.T) {
 	cid4, _ := prefix.Sum([]byte("none"))
 
 	d := Parallel{
-		&Compose{},
-		&Compose{
-			ContentRouting: &dummyProvider{
-				cids: map[string][]peer.ID{
+		Parallel{
+			&Compose{},
+		},
+		Serial{
+			&Compose{},
+		},
+		Null{},
+		Serial{
+			&Compose{
+				ContentRouting: dummyProvider{
 					cid1.KeyString(): []peer.ID{
 						"first",
 						"second",
@@ -137,9 +151,9 @@ func TestParallelFindProviders(t *testing.T) {
 				},
 			},
 		},
-		&Compose{
-			ContentRouting: &dummyProvider{
-				cids: map[string][]peer.ID{
+		Parallel{
+			&Compose{
+				ContentRouting: dummyProvider{
 					cid1.KeyString(): []peer.ID{
 						"first",
 						"second",
@@ -159,17 +173,15 @@ func TestParallelFindProviders(t *testing.T) {
 				ValueStore: new(dummyValueStore),
 				Namespaces: []string{"allow1"},
 			},
-			ContentRouting: &dummyProvider{
-				cids: map[string][]peer.ID{
-					cid2.KeyString(): []peer.ID{
-						"first",
-					},
-					cid3.KeyString(): []peer.ID{
-						"second",
-						"fourth",
-						"fifth",
-						"sixth",
-					},
+			ContentRouting: dummyProvider{
+				cid2.KeyString(): []peer.ID{
+					"first",
+				},
+				cid3.KeyString(): []peer.ID{
+					"second",
+					"fourth",
+					"fifth",
+					"sixth",
 				},
 			},
 		},
@@ -237,5 +249,95 @@ func TestParallelFindProviders(t *testing.T) {
 				ContentRouting: &dummyProvider{},
 			})
 		}
+	}
+}
+
+func TestParallelFindPeer(t *testing.T) {
+	d := Parallel{
+		Null{},
+		Parallel{
+			Null{},
+			Null{},
+		},
+		Serial{
+			Null{},
+			Null{},
+		},
+		Parallel{
+			&Compose{
+				PeerRouting: dummyPeerRouter{
+					"first":  struct{}{},
+					"second": struct{}{},
+				},
+			},
+		},
+		Serial{
+			&Compose{
+				PeerRouting: dummyPeerRouter{
+					"first": struct{}{},
+					"third": struct{}{},
+				},
+			},
+		},
+		&Compose{
+			PeerRouting: dummyPeerRouter{
+				"first": struct{}{},
+				"fifth": struct{}{},
+			},
+		},
+	}
+
+	ctx := context.Background()
+
+	for _, di := range append([]routing.IpfsRouting{d}, d[3:]...) {
+		if _, err := di.FindPeer(ctx, "first"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, p := range []peer.ID{
+		"first",
+		"second",
+		"third",
+		"fifth",
+	} {
+		if _, err := d.FindPeer(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := d.FindPeer(ctx, "fourth"); err != routing.ErrNotFound {
+		t.Fatal(err)
+	}
+}
+
+func TestParallelProvide(t *testing.T) {
+	prefix := cid.NewPrefixV1(cid.Raw, mh.SHA2_256)
+
+	d := Parallel{
+		Parallel{
+			&Compose{
+				ContentRouting: cbProvider(func(c *cid.Cid, local bool) error {
+					return routing.ErrNotSupported
+				}),
+			},
+			&Compose{
+				ContentRouting: cbProvider(func(c *cid.Cid, local bool) error {
+					return errors.New(c.String())
+				}),
+			},
+		},
+		Serial{
+			&Compose{},
+			&Compose{},
+		},
+	}
+
+	ctx := context.Background()
+
+	cid1, _ := prefix.Sum([]byte("foo"))
+
+	if err := d.Provide(ctx, cid1, false); err.Error() != cid1.String() {
+		t.Fatal(err)
 	}
 }

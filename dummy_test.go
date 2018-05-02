@@ -33,13 +33,10 @@ func (d *dummyValueStore) GetValue(ctx context.Context, key string, opts ...ropt
 	return nil, routing.ErrNotFound
 }
 
-type dummyProvider struct {
-	cids      map[string][]peer.ID
-	providing sync.Map
-}
+type dummyProvider map[string][]peer.ID
 
-func (d *dummyProvider) FindProvidersAsync(ctx context.Context, c *cid.Cid, count int) <-chan pstore.PeerInfo {
-	peers := d.cids[c.KeyString()]
+func (d dummyProvider) FindProvidersAsync(ctx context.Context, c *cid.Cid, count int) <-chan pstore.PeerInfo {
+	peers := d[c.KeyString()]
 	if len(peers) > count {
 		peers = peers[:count]
 	}
@@ -51,7 +48,27 @@ func (d *dummyProvider) FindProvidersAsync(ctx context.Context, c *cid.Cid, coun
 	return out
 }
 
-func (d *dummyProvider) Provide(ctx context.Context, c *cid.Cid, local bool) error {
-	d.providing.Store(c.KeyString(), local)
-	return nil
+func (d dummyProvider) Provide(ctx context.Context, c *cid.Cid, local bool) error {
+	return routing.ErrNotSupported
+}
+
+type cbProvider func(c *cid.Cid, local bool) error
+
+func (d cbProvider) Provide(ctx context.Context, c *cid.Cid, local bool) error {
+	return d(c, local)
+}
+
+func (d cbProvider) FindProvidersAsync(ctx context.Context, c *cid.Cid, count int) <-chan pstore.PeerInfo {
+	ch := make(chan pstore.PeerInfo)
+	close(ch)
+	return ch
+}
+
+type dummyPeerRouter map[peer.ID]struct{}
+
+func (d dummyPeerRouter) FindPeer(ctx context.Context, p peer.ID) (pstore.PeerInfo, error) {
+	if _, ok := d[p]; ok {
+		return pstore.PeerInfo{ID: p}, nil
+	}
+	return pstore.PeerInfo{}, routing.ErrNotFound
 }
