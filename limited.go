@@ -60,6 +60,14 @@ func (lvs *LimitedValueStore) GetValue(ctx context.Context, key string, opts ...
 	return lvs.ValueStore.GetValue(ctx, key, opts...)
 }
 
+// GetValue returns ErrNotSupported
+func (lvs *LimitedValueStore) SearchValue(ctx context.Context, key string, opts ...ropts.Option) (<-chan []byte, error) {
+	if !lvs.KeySupported(key) {
+		return nil, routing.ErrNotFound
+	}
+	return lvs.ValueStore.SearchValue(ctx, key, opts...)
+}
+
 func (lvs *LimitedValueStore) Bootstrap(ctx context.Context) error {
 	if bs, ok := lvs.ValueStore.(Bootstrap); ok {
 		return bs.Bootstrap(ctx)
