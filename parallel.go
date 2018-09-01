@@ -156,7 +156,7 @@ func (r Parallel) search(ctx context.Context, do func(routing.IpfsRouting) (<-ch
 		return do(r[0])
 	}
 
-	rchan := make(chan []byte)
+	out := make(chan []byte)
 	var errs []error
 	var wg sync.WaitGroup
 
@@ -175,7 +175,13 @@ func (r Parallel) search(ctx context.Context, do func(routing.IpfsRouting) (<-ch
 			defer wg.Done()
 			for {
 				select {
-				case rchan <- <-vchan:
+				case v := <-vchan:
+					//TODO: run validator.Select here
+					select {
+					case out <- v:
+					case <-ctx.Done():
+						return
+					}
 				case <-ctx.Done():
 					return
 				}
@@ -185,10 +191,10 @@ func (r Parallel) search(ctx context.Context, do func(routing.IpfsRouting) (<-ch
 
 	go func() {
 		wg.Wait()
-		close(rchan)
+		close(out)
 	}()
 
-	return rchan, nil
+	return out, nil
 }
 
 func (r Parallel) get(ctx context.Context, do func(routing.IpfsRouting) (interface{}, error)) (interface{}, error) {
