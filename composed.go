@@ -47,7 +47,9 @@ func (cr *Compose) GetValue(ctx context.Context, key string, opts ...ropts.Optio
 // SearchValue searches for the value corresponding to given Key.
 func (cr *Compose) SearchValue(ctx context.Context, key string, opts ...ropts.Option) (<-chan []byte, error) {
 	if cr.ValueStore == nil {
-		return nil, routing.ErrNotFound
+		out := make(chan []byte)
+		close(out)
+		return out, nil
 	}
 	return cr.ValueStore.SearchValue(ctx, key, opts...)
 }

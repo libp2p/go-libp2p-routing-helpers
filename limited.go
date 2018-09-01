@@ -52,7 +52,7 @@ func (lvs *LimitedValueStore) KeySupported(key string) bool {
 	return false
 }
 
-// GetValue returns ErrNotSupported
+// GetValue returns routing.ErrNotFound if key isn't supported
 func (lvs *LimitedValueStore) GetValue(ctx context.Context, key string, opts ...ropts.Option) ([]byte, error) {
 	if !lvs.KeySupported(key) {
 		return nil, routing.ErrNotFound
@@ -60,10 +60,13 @@ func (lvs *LimitedValueStore) GetValue(ctx context.Context, key string, opts ...
 	return lvs.ValueStore.GetValue(ctx, key, opts...)
 }
 
-// GetValue returns ErrNotSupported
+// SearchValue returns empty channel if key isn't supported or calls SearchValue
+// on the underlying ValueStore
 func (lvs *LimitedValueStore) SearchValue(ctx context.Context, key string, opts ...ropts.Option) (<-chan []byte, error) {
 	if !lvs.KeySupported(key) {
-		return nil, routing.ErrNotFound
+		out := make(chan []byte)
+		close(out)
+		return out, nil
 	}
 	return lvs.ValueStore.SearchValue(ctx, key, opts...)
 }
