@@ -1,13 +1,124 @@
 package routinghelpers
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
 	errwrap "github.com/hashicorp/errwrap"
 	cid "github.com/ipfs/go-cid"
+	record "github.com/libp2p/go-libp2p-record"
 	routing "github.com/libp2p/go-libp2p-routing"
 )
+
+type testValidator struct{}
+
+func (testValidator) Validate(key string, value []byte) error {
+	ns, k, err := record.SplitKey(key)
+	if err != nil {
+		return err
+	}
+	if ns != "namespace" {
+		return record.ErrInvalidRecordType
+	}
+	if !bytes.Contains(value, []byte(k)) {
+		return record.ErrInvalidRecordType
+	}
+	if bytes.Contains(value, []byte("invalid")) {
+		return record.ErrInvalidRecordType
+	}
+	return nil
+
+}
+
+func (testValidator) Select(key string, vals [][]byte) (int, error) {
+	if len(vals) == 0 {
+		panic("selector with no values")
+	}
+	var best []byte
+	idx := 0
+	for i, val := range vals {
+		if bytes.Compare(best, val) < 0 {
+			best = val
+			idx = i
+		}
+	}
+	return idx, nil
+}
+
+func TestTieredSearch(t *testing.T) {
+	d := Tiered{
+		Validator: testValidator{},
+		Routers: []routing.IpfsRouting{
+			Null{},
+			&Compose{
+				ValueStore:     new(dummyValueStore),
+				ContentRouting: Null{},
+				PeerRouting:    Null{},
+			},
+			&Compose{
+				ValueStore:     new(dummyValueStore),
+				ContentRouting: Null{},
+				PeerRouting:    Null{},
+			},
+			Null{},
+			&Compose{},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := d.Routers[1].PutValue(ctx, "/namespace/v1", []byte("v1 - 1")); err != nil {
+		t.Fatal(err)
+	}
+
+	valch, err := d.SearchValue(ctx, "/namespace/v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v, ok := <-valch
+	if !ok {
+		t.Fatal("expected to get a value")
+	}
+	if string(v) != "v1 - 1" {
+		t.Fatalf("unexpected value: %s", string(v))
+	}
+	_, ok = <-valch
+	if ok {
+		t.Fatal("didn't expect a value")
+	}
+
+	if err := d.Routers[2].PutValue(ctx, "/namespace/v1", []byte("v1 - 2")); err != nil {
+		t.Fatal(err)
+	}
+	valch, err = d.SearchValue(ctx, "/namespace/v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v, ok = <-valch
+	if !ok {
+		t.Fatal("expected to get a value")
+	}
+	if string(v) != "v1 - 1" {
+		t.Fatalf("unexpected value: %s", string(v))
+	}
+
+	v, ok = <-valch
+	if !ok {
+		t.Fatal("expected to get a value")
+	}
+	if string(v) != "v1 - 2" {
+		t.Fatalf("unexpected value: %s", string(v))
+	}
+
+	_, ok = <-valch
+	if ok {
+		t.Fatal("didn't expect a value")
+	}
+}
 
 func TestTieredGet(t *testing.T) {
 	d := Tiered{
