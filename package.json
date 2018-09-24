@@ -38,9 +38,9 @@
       "version": "2.0.0"
     },
     {
-      "hash": "QmaJ6QDUh7JKPPToaUZ4EtUsPBdrbSAG6zMTkzfEvZgz2j",
+      "hash": "QmaM261ArNTmKMybV4LKy68JTZrf5CkCbRGDxsZwYHgqDS",
       "name": "go-libp2p-routing",
-      "version": "2.6.0"
+      "version": "2.6.1"
     },
     {
       "author": "hashicorp",
@@ -60,6 +60,6 @@
   "license": "MIT",
   "name": "go-libp2p-routing-helpers",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "0.3.0"
+  "version": "0.3.1"
 }
 
