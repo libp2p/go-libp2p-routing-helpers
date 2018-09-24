@@ -1,6 +1,7 @@
 package routinghelpers
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"sync"
@@ -309,6 +310,10 @@ func (r Parallel) SearchValue(ctx context.Context, key string, opts ...ropts.Opt
 					continue
 				}
 			}
+			if bytes.Equal(best, v) && len(v) != 0 {
+				continue
+			}
+
 			best = v
 			select {
 			case valid <- v:
