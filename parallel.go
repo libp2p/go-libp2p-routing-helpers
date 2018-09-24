@@ -175,8 +175,11 @@ func (r Parallel) search(ctx context.Context, do func(routing.IpfsRouting) (<-ch
 			defer wg.Done()
 			for {
 				select {
-				case v := <-vchan:
-					//TODO: run validator.Select here
+				case v, ok := <-vchan:
+					if !ok {
+						return
+					}
+
 					select {
 					case out <- v:
 					case <-ctx.Done():
