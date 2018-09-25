@@ -290,6 +290,9 @@ func (r Parallel) SearchValue(ctx context.Context, key string, opts ...ropts.Opt
 	resCh, err := r.forKey(key).search(ctx, func(ri routing.IpfsRouting) (<-chan []byte, error) {
 		return ri.SearchValue(ctx, key, opts...)
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	valid := make(chan []byte)
 	var best []byte
@@ -297,11 +300,7 @@ func (r Parallel) SearchValue(ctx context.Context, key string, opts ...ropts.Opt
 		defer close(valid)
 
 		for v := range resCh {
-			if best == nil {
-				if r.Validator.Validate(key, v) != nil {
-					continue
-				}
-			} else {
+			if best != nil {
 				n, err := r.Validator.Select(key, [][]byte{best, v})
 				if err != nil {
 					continue
