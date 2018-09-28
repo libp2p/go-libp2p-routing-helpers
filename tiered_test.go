@@ -102,22 +102,19 @@ func TestTieredSearch(t *testing.T) {
 	if !ok {
 		t.Fatal("expected to get a value")
 	}
-	if string(v) != "v1 - 1" {
-		t.Fatalf("unexpected value: %s", string(v))
-	}
 
 	v, ok = <-valch
-	if !ok {
-		t.Fatal("expected to get a value")
-	}
-	if string(v) != "v1 - 2" {
-		t.Fatalf("unexpected value: %s", string(v))
+	if ok {
+		if string(v) != "v1 - 2" {
+			t.Fatalf("unexpected value: %s", string(v))
+		}
+
+		_, ok = <-valch
+		if ok {
+			t.Fatal("didn't expect a value")
+		}
 	}
 
-	_, ok = <-valch
-	if ok {
-		t.Fatal("didn't expect a value")
-	}
 }
 
 func TestTieredGet(t *testing.T) {
