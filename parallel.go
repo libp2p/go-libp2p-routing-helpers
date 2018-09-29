@@ -160,10 +160,12 @@ func (r Parallel) search(ctx context.Context, do func(routing.IpfsRouting) (<-ch
 		return do(r.Routers[0])
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	out := make(chan []byte)
 	var errs []error
-	var wg sync.WaitGroup
 
+	var wg sync.WaitGroup
 	for _, ri := range r.Routers {
 		vchan, err := do(ri)
 		switch err {
@@ -173,19 +175,25 @@ func (r Parallel) search(ctx context.Context, do func(routing.IpfsRouting) (<-ch
 		default:
 			errs = append(errs, err)
 		}
-		wg.Add(1)
 
+		wg.Add(1)
 		go func() {
+			var sent int
 			defer wg.Done()
+
 			for {
 				select {
 				case v, ok := <-vchan:
 					if !ok {
+						if sent > 0 {
+							cancel()
+						}
 						return
 					}
 
 					select {
 					case out <- v:
+						sent++
 					case <-ctx.Done():
 						return
 					}
@@ -199,6 +207,7 @@ func (r Parallel) search(ctx context.Context, do func(routing.IpfsRouting) (<-ch
 	go func() {
 		wg.Wait()
 		close(out)
+		cancel()
 	}()
 
 	return out, nil
