@@ -4,12 +4,12 @@ import (
 	"context"
 
 	multierror "github.com/hashicorp/go-multierror"
-	cid "github.com/ipfs/go-cid"
 	ci "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 	routing "github.com/libp2p/go-libp2p-routing"
 	ropts "github.com/libp2p/go-libp2p-routing/options"
+	mh "github.com/multiformats/go-multihash"
 )
 
 // Compose composes the components into a single router. Not specifying a
@@ -47,7 +47,7 @@ func (cr *Compose) GetValue(ctx context.Context, key string, opts ...ropts.Optio
 // Provide adds the given cid to the content routing system. If 'true' is
 // passed, it also announces it, otherwise it is just kept in the local
 // accounting of which objects are being provided.
-func (cr *Compose) Provide(ctx context.Context, c cid.Cid, local bool) error {
+func (cr *Compose) Provide(ctx context.Context, c mh.Multihash, local bool) error {
 	if cr.ContentRouting == nil {
 		return routing.ErrNotSupported
 	}
@@ -55,7 +55,7 @@ func (cr *Compose) Provide(ctx context.Context, c cid.Cid, local bool) error {
 }
 
 // FindProvidersAsync searches for peers who are able to provide a given key
-func (cr *Compose) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan pstore.PeerInfo {
+func (cr *Compose) FindProvidersAsync(ctx context.Context, c mh.Multihash, count int) <-chan pstore.PeerInfo {
 	if cr.ContentRouting == nil {
 		ch := make(chan pstore.PeerInfo)
 		close(ch)

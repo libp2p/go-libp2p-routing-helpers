@@ -6,7 +6,7 @@ import (
 	routing "github.com/libp2p/go-libp2p-routing"
 	ropts "github.com/libp2p/go-libp2p-routing/options"
 
-	cid "github.com/ipfs/go-cid"
+	mh "github.com/multiformats/go-multihash"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 )
@@ -25,12 +25,12 @@ func (nr Null) GetValue(context.Context, string, ...ropts.Option) ([]byte, error
 }
 
 // Provide always returns ErrNotSupported
-func (nr Null) Provide(context.Context, cid.Cid, bool) error {
+func (nr Null) Provide(context.Context, mh.Multihash, bool) error {
 	return routing.ErrNotSupported
 }
 
 // FindProvidersAsync always returns a closed channel
-func (nr Null) FindProvidersAsync(context.Context, cid.Cid, int) <-chan pstore.PeerInfo {
+func (nr Null) FindProvidersAsync(context.Context, mh.Multihash, int) <-chan pstore.PeerInfo {
 	ch := make(chan pstore.PeerInfo)
 	close(ch)
 	return ch

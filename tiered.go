@@ -7,10 +7,10 @@ import (
 	ropts "github.com/libp2p/go-libp2p-routing/options"
 
 	multierror "github.com/hashicorp/go-multierror"
-	cid "github.com/ipfs/go-cid"
 	ci "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
+	mh "github.com/multiformats/go-multihash"
 )
 
 // Tiered is like the Parallel except that GetValue and FindPeer
@@ -62,11 +62,11 @@ func (r Tiered) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error) 
 	return val, err
 }
 
-func (r Tiered) Provide(ctx context.Context, c cid.Cid, local bool) error {
+func (r Tiered) Provide(ctx context.Context, c mh.Multihash, local bool) error {
 	return Parallel(r).Provide(ctx, c, local)
 }
 
-func (r Tiered) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan pstore.PeerInfo {
+func (r Tiered) FindProvidersAsync(ctx context.Context, c mh.Multihash, count int) <-chan pstore.PeerInfo {
 	return Parallel(r).FindProvidersAsync(ctx, c, count)
 }
 
