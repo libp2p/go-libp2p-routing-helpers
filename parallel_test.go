@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/routing"
+
 	errwrap "github.com/hashicorp/errwrap"
 	cid "github.com/ipfs/go-cid"
-	peer "github.com/libp2p/go-libp2p-peer"
-	routing "github.com/libp2p/go-libp2p-routing"
 	mh "github.com/multiformats/go-multihash"
 )
 
@@ -18,9 +19,9 @@ import (
 
 func TestParallelPutGet(t *testing.T) {
 	d := Parallel{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			Parallel{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{
 						ValueStore: &LimitedValueStore{
 							ValueStore: new(dummyValueStore),
@@ -30,7 +31,7 @@ func TestParallelPutGet(t *testing.T) {
 				},
 			},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{
 						ValueStore: &LimitedValueStore{
 							ValueStore: new(dummyValueStore),
@@ -46,10 +47,10 @@ func TestParallelPutGet(t *testing.T) {
 				},
 			},
 			Parallel{
-				Routers: []routing.IpfsRouting{&struct{ Compose }{}},
+				Routers: []routing.Routing{&struct{ Compose }{}},
 			},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&struct{ Compose }{},
 				},
 			},
@@ -64,7 +65,7 @@ func TestParallelPutGet(t *testing.T) {
 	if err := d.PutValue(ctx, "/allow1/hello", []byte("world")); err != nil {
 		t.Fatal(err)
 	}
-	for _, di := range append([]routing.IpfsRouting{d}, d.Routers[:3]...) {
+	for _, di := range append([]routing.Routing{d}, d.Routers[:3]...) {
 		v, err := di.GetValue(ctx, "/allow1/hello")
 		if err != nil {
 			t.Fatal(err)
@@ -77,7 +78,7 @@ func TestParallelPutGet(t *testing.T) {
 	if err := d.PutValue(ctx, "/allow2/hello", []byte("world2")); err != nil {
 		t.Fatal(err)
 	}
-	for _, di := range append([]routing.IpfsRouting{d}, d.Routers[:1]...) {
+	for _, di := range append([]routing.Routing{d}, d.Routers[:1]...) {
 		v, err := di.GetValue(ctx, "/allow2/hello")
 		if err != nil {
 			t.Fatal(err)
@@ -89,7 +90,7 @@ func TestParallelPutGet(t *testing.T) {
 	if err := d.PutValue(ctx, "/forbidden/hello", []byte("world")); err != routing.ErrNotSupported {
 		t.Fatalf("expected ErrNotSupported, got: %s", err)
 	}
-	for _, di := range append([]routing.IpfsRouting{d}, d.Routers...) {
+	for _, di := range append([]routing.Routing{d}, d.Routers...) {
 		_, err := di.GetValue(ctx, "/forbidden/hello")
 		if err != routing.ErrNotFound {
 			t.Fatalf("expected ErrNotFound, got: %s", err)
@@ -132,7 +133,7 @@ func TestParallelPutGet(t *testing.T) {
 func TestParallelPutFailure(t *testing.T) {
 	ctx := context.Background()
 	router := Parallel{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			&Compose{
 				ValueStore: new(failValueStore),
 			},
@@ -158,7 +159,7 @@ func TestBasicParallelFindProviders(t *testing.T) {
 		t.Fatal("expected no results")
 	}
 	d = Parallel{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			&Compose{
 				ContentRouting: &dummyProvider{},
 			},
@@ -179,14 +180,14 @@ func TestParallelFindProviders(t *testing.T) {
 	cid5, _ := prefix.Sum([]byte("stall"))
 
 	d := Parallel{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			Parallel{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{},
 				},
 			},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{},
 					&struct{ Compose }{},
 				},
@@ -194,7 +195,7 @@ func TestParallelFindProviders(t *testing.T) {
 			&struct{ Compose }{},
 			Null{},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{
 						ContentRouting: dummyProvider{
 							cid1.KeyString(): []peer.ID{
@@ -220,7 +221,7 @@ func TestParallelFindProviders(t *testing.T) {
 				},
 			},
 			Parallel{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					Null{},
 					&Compose{
 						ContentRouting: dummyProvider{
@@ -344,23 +345,23 @@ func TestParallelFindProviders(t *testing.T) {
 
 func TestParallelFindPeer(t *testing.T) {
 	d := Parallel{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			Null{},
 			Parallel{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					Null{},
 					Null{},
 				},
 			},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					Null{},
 					Null{},
 				},
 			},
 			&struct{ Compose }{},
 			Parallel{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{
 						PeerRouting: dummyPeerRouter{
 							"first":  struct{}{},
@@ -370,7 +371,7 @@ func TestParallelFindPeer(t *testing.T) {
 				},
 			},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{
 						PeerRouting: dummyPeerRouter{
 							"first": struct{}{},
@@ -390,7 +391,7 @@ func TestParallelFindPeer(t *testing.T) {
 
 	ctx := context.Background()
 
-	for _, di := range append([]routing.IpfsRouting{d}, d.Routers[4:]...) {
+	for _, di := range append([]routing.Routing{d}, d.Routers[4:]...) {
 		if _, err := di.FindPeer(ctx, "first"); err != nil {
 			t.Fatal(err)
 		}
@@ -416,9 +417,9 @@ func TestParallelProvide(t *testing.T) {
 	prefix := cid.NewPrefixV1(cid.Raw, mh.SHA2_256)
 
 	d := Parallel{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			Parallel{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{
 						ContentRouting: cbProvider(func(c cid.Cid, local bool) error {
 							return routing.ErrNotSupported
@@ -432,7 +433,7 @@ func TestParallelProvide(t *testing.T) {
 				},
 			},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&struct{ Compose }{},
 					&Compose{},
 					&Compose{},

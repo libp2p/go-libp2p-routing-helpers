@@ -5,10 +5,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/libp2p/go-libp2p-core/routing"
+
+	record "github.com/libp2p/go-libp2p-record"
+
 	errwrap "github.com/hashicorp/errwrap"
 	cid "github.com/ipfs/go-cid"
-	record "github.com/libp2p/go-libp2p-record"
-	routing "github.com/libp2p/go-libp2p-routing"
 )
 
 type testValidator struct{}
@@ -49,7 +51,7 @@ func (testValidator) Select(key string, vals [][]byte) (int, error) {
 func TestTieredSearch(t *testing.T) {
 	d := Tiered{
 		Validator: testValidator{},
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			Null{},
 			&Compose{
 				ValueStore:     new(dummyValueStore),
@@ -119,7 +121,7 @@ func TestTieredSearch(t *testing.T) {
 
 func TestTieredGet(t *testing.T) {
 	d := Tiered{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			Null{},
 			&Compose{
 				ValueStore:     new(dummyValueStore),
@@ -179,11 +181,11 @@ func TestTieredGet(t *testing.T) {
 		t.Fatalf("expected error to contain myErr, got: %s", err)
 	}
 
-	if _, err := (Tiered{Routers: []routing.IpfsRouting{d.Routers[1]}}).GetValue(ctx, "/error/myErr"); !errwrap.Contains(err, "myErr") {
+	if _, err := (Tiered{Routers: []routing.Routing{d.Routers[1]}}).GetValue(ctx, "/error/myErr"); !errwrap.Contains(err, "myErr") {
 		t.Fatalf("expected error to contain myErr, got: %s", err)
 	}
 
-	for _, di := range append([]routing.IpfsRouting{d}, d.Routers[1:len(d.Routers)-2]...) {
+	for _, di := range append([]routing.Routing{d}, d.Routers[1:len(d.Routers)-2]...) {
 		v, err := di.GetValue(ctx, "key")
 		if err != nil {
 			t.Fatal(err)
@@ -195,7 +197,7 @@ func TestTieredGet(t *testing.T) {
 }
 
 func TestTieredNoSupport(t *testing.T) {
-	d := Tiered{Routers: []routing.IpfsRouting{Tiered{Routers: []routing.IpfsRouting{Null{}}}}}
+	d := Tiered{Routers: []routing.Routing{Tiered{Routers: []routing.Routing{Null{}}}}}
 	if _, ok := <-d.FindProvidersAsync(context.Background(), cid.Cid{}, 0); ok {
 		t.Fatal("shouldn't have found a provider")
 	}
