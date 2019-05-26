@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	routing "github.com/libp2p/go-libp2p-routing"
+	"github.com/libp2p/go-libp2p-core/routing"
 )
 
 func TestLimitedValueStore(t *testing.T) {

@@ -6,31 +6,30 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/routing"
+
 	cid "github.com/ipfs/go-cid"
-	peer "github.com/libp2p/go-libp2p-peer"
-	pstore "github.com/libp2p/go-libp2p-peerstore"
-	routing "github.com/libp2p/go-libp2p-routing"
-	ropts "github.com/libp2p/go-libp2p-routing/options"
 )
 
 type failValueStore struct{}
 
 var failValueErr = errors.New("fail valuestore error")
 
-func (f failValueStore) PutValue(ctx context.Context, key string, value []byte, opts ...ropts.Option) error {
+func (f failValueStore) PutValue(ctx context.Context, key string, value []byte, opts ...routing.Option) error {
 	return failValueErr
 }
-func (f failValueStore) GetValue(ctx context.Context, key string, opts ...ropts.Option) ([]byte, error) {
+func (f failValueStore) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
 	return nil, failValueErr
 }
 
-func (f failValueStore) SearchValue(ctx context.Context, key string, opts ...ropts.Option) (<-chan []byte, error) {
+func (f failValueStore) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
 	return nil, failValueErr
 }
 
 type dummyValueStore sync.Map
 
-func (d *dummyValueStore) PutValue(ctx context.Context, key string, value []byte, opts ...ropts.Option) error {
+func (d *dummyValueStore) PutValue(ctx context.Context, key string, value []byte, opts ...routing.Option) error {
 	if strings.HasPrefix(key, "/notsupported/") {
 		return routing.ErrNotSupported
 	}
@@ -45,7 +44,7 @@ func (d *dummyValueStore) PutValue(ctx context.Context, key string, value []byte
 	return nil
 }
 
-func (d *dummyValueStore) GetValue(ctx context.Context, key string, opts ...ropts.Option) ([]byte, error) {
+func (d *dummyValueStore) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
 	if strings.HasPrefix(key, "/error/") {
 		return nil, errors.New(key[len("/error/"):])
 	}
@@ -59,7 +58,7 @@ func (d *dummyValueStore) GetValue(ctx context.Context, key string, opts ...ropt
 	return nil, routing.ErrNotFound
 }
 
-func (d *dummyValueStore) SearchValue(ctx context.Context, key string, opts ...ropts.Option) (<-chan []byte, error) {
+func (d *dummyValueStore) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
 	out := make(chan []byte)
 	if strings.HasPrefix(key, "/error/") {
 		return nil, errors.New(key[len("/error/"):])
@@ -80,12 +79,12 @@ func (d *dummyValueStore) SearchValue(ctx context.Context, key string, opts ...r
 
 type dummyProvider map[string][]peer.ID
 
-func (d dummyProvider) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan pstore.PeerInfo {
+func (d dummyProvider) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan peer.AddrInfo {
 	peers := d[c.KeyString()]
 	if len(peers) > count {
 		peers = peers[:count]
 	}
-	out := make(chan pstore.PeerInfo)
+	out := make(chan peer.AddrInfo)
 	go func() {
 		defer close(out)
 		for _, p := range peers {
@@ -94,7 +93,7 @@ func (d dummyProvider) FindProvidersAsync(ctx context.Context, c cid.Cid, count 
 				return
 			}
 			select {
-			case out <- pstore.PeerInfo{ID: p}:
+			case out <- peer.AddrInfo{ID: p}:
 			case <-ctx.Done():
 			}
 		}
@@ -112,17 +111,17 @@ func (d cbProvider) Provide(ctx context.Context, c cid.Cid, local bool) error {
 	return d(c, local)
 }
 
-func (d cbProvider) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan pstore.PeerInfo {
-	ch := make(chan pstore.PeerInfo)
+func (d cbProvider) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan peer.AddrInfo {
+	ch := make(chan peer.AddrInfo)
 	close(ch)
 	return ch
 }
 
 type dummyPeerRouter map[peer.ID]struct{}
 
-func (d dummyPeerRouter) FindPeer(ctx context.Context, p peer.ID) (pstore.PeerInfo, error) {
+func (d dummyPeerRouter) FindPeer(ctx context.Context, p peer.ID) (peer.AddrInfo, error) {
 	if _, ok := d[p]; ok {
-		return pstore.PeerInfo{ID: p}, nil
+		return peer.AddrInfo{ID: p}, nil
 	}
-	return pstore.PeerInfo{}, routing.ErrNotFound
+	return peer.AddrInfo{}, routing.ErrNotFound
 }

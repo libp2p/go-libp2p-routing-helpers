@@ -4,15 +4,15 @@ import (
 	"context"
 	"testing"
 
-	peert "github.com/libp2p/go-libp2p-peer/test"
-	routing "github.com/libp2p/go-libp2p-routing"
+	"github.com/libp2p/go-libp2p-core/routing"
+	"github.com/libp2p/go-libp2p-core/test"
 )
 
 func TestGetPublicKey(t *testing.T) {
 	d := Parallel{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			Parallel{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{
 						ValueStore: &LimitedValueStore{
 							ValueStore: new(dummyValueStore),
@@ -22,7 +22,7 @@ func TestGetPublicKey(t *testing.T) {
 				},
 			},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&Compose{
 						ValueStore: &LimitedValueStore{
 							ValueStore: new(dummyValueStore),
@@ -42,7 +42,7 @@ func TestGetPublicKey(t *testing.T) {
 		},
 	}
 
-	pid, _ := peert.RandPeerID()
+	pid, _ := test.RandPeerID()
 
 	ctx := context.Background()
 	if _, err := d.GetPublicKey(ctx, pid); err != routing.ErrNotFound {

@@ -5,8 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/libp2p/go-libp2p-core/routing"
+
 	errwrap "github.com/hashicorp/errwrap"
-	routing "github.com/libp2p/go-libp2p-routing"
 )
 
 type bootstrapRouter struct {
@@ -21,9 +22,9 @@ func (bs *bootstrapRouter) Bootstrap(ctx context.Context) error {
 func TestBootstrap(t *testing.T) {
 	pings := make([]bool, 6)
 	d := Parallel{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&bootstrapRouter{
 						bs: func() error {
 							pings[0] = true
@@ -33,7 +34,7 @@ func TestBootstrap(t *testing.T) {
 				},
 			},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&bootstrapRouter{
 						bs: func() error {
 							pings[1] = true
@@ -95,9 +96,9 @@ func TestBootstrap(t *testing.T) {
 }
 func TestBootstrapErr(t *testing.T) {
 	d := Parallel{
-		Routers: []routing.IpfsRouting{
+		Routers: []routing.Routing{
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&bootstrapRouter{
 						bs: func() error {
 							return errors.New("err1")
@@ -106,7 +107,7 @@ func TestBootstrapErr(t *testing.T) {
 				},
 			},
 			Tiered{
-				Routers: []routing.IpfsRouting{
+				Routers: []routing.Routing{
 					&bootstrapRouter{
 						bs: func() error {
 							return nil
