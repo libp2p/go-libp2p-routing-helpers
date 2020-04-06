@@ -28,4 +28,7 @@ func TestNull(t *testing.T) {
 	if _, err := n.FindPeer(ctx, peer.ID("thing")); err != routing.ErrNotFound {
 		t.Fatal(err)
 	}
+	if err := n.Close(); err != nil {
+		t.Fatal(err)
+	}
 }

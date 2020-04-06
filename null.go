@@ -49,4 +49,9 @@ func (nr Null) Bootstrap(context.Context) error {
 	return nil
 }
 
+// Close always succeeds instantly
+func (nr Null) Close() error {
+	return nil
+}
+
 var _ routing.Routing = Null{}

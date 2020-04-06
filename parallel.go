@@ -3,6 +3,7 @@ package routinghelpers
 import (
 	"bytes"
 	"context"
+	"io"
 	"reflect"
 	"sync"
 
@@ -500,6 +501,18 @@ func (r Parallel) Bootstrap(ctx context.Context) error {
 	for _, b := range r.Routers {
 		if err := b.Bootstrap(ctx); err != nil {
 			me.Errors = append(me.Errors, err)
+		}
+	}
+	return me.ErrorOrNil()
+}
+
+func (r Parallel) Close() error {
+	var me multierror.Error
+	for _, router := range r.Routers {
+		if closer, ok := router.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				me.Errors = append(me.Errors, err)
+			}
 		}
 	}
 	return me.ErrorOrNil()

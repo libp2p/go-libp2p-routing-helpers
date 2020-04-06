@@ -12,6 +12,15 @@ import (
 	cid "github.com/ipfs/go-cid"
 )
 
+type testCloser struct {
+	closed int
+}
+
+func (closer *testCloser) Close() error {
+	closer.closed++
+	return nil
+}
+
 type failValueStore struct{}
 
 var failValueErr = errors.New("fail valuestore error")

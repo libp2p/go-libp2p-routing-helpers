@@ -8,3 +8,5 @@ require (
 	github.com/libp2p/go-libp2p-record v0.1.2
 	github.com/multiformats/go-multihash v0.0.13
 )
+
+go 1.13

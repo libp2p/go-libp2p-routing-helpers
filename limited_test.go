@@ -63,3 +63,17 @@ func TestLimitedValueStore(t *testing.T) {
 		}
 	}
 }
+
+func TestLimitedClose(t *testing.T) {
+	closer := new(testCloser)
+	d := LimitedValueStore{
+		ValueStore: struct {
+			*testCloser
+			routing.Routing
+		}{closer, Null{}},
+	}
+	d.Close()
+	if closer.closed != 1 {
+		t.Fatal("expected one close")
+	}
+}
