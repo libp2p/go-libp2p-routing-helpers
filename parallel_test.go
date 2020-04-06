@@ -450,3 +450,19 @@ func TestParallelProvide(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestParallelClose(t *testing.T) {
+	closer := new(testCloser)
+	d := Parallel{
+		Routers: []routing.Routing{
+			struct {
+				*testCloser
+				routing.Routing
+			}{closer, Null{}},
+		},
+	}
+	d.Close()
+	if closer.closed != 1 {
+		t.Fatalf("expected one close, got %d", closer.closed)
+	}
+}

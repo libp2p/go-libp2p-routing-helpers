@@ -202,3 +202,19 @@ func TestTieredNoSupport(t *testing.T) {
 		t.Fatal("shouldn't have found a provider")
 	}
 }
+
+func TestTieredClose(t *testing.T) {
+	closer := new(testCloser)
+	d := Tiered{
+		Routers: []routing.Routing{
+			struct {
+				*testCloser
+				routing.Routing
+			}{closer, Null{}},
+		},
+	}
+	d.Close()
+	if closer.closed != 1 {
+		t.Fatal("expected one close")
+	}
+}

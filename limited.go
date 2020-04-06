@@ -2,6 +2,7 @@ package routinghelpers
 
 import (
 	"context"
+	"io"
 	"strings"
 
 	ci "github.com/libp2p/go-libp2p-core/crypto"
@@ -72,6 +73,13 @@ func (lvs *LimitedValueStore) SearchValue(ctx context.Context, key string, opts 
 func (lvs *LimitedValueStore) Bootstrap(ctx context.Context) error {
 	if bs, ok := lvs.ValueStore.(Bootstrap); ok {
 		return bs.Bootstrap(ctx)
+	}
+	return nil
+}
+
+func (lvs *LimitedValueStore) Close() error {
+	if closer, ok := lvs.ValueStore.(io.Closer); ok {
+		return closer.Close()
 	}
 	return nil
 }

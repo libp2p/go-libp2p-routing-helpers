@@ -2,6 +2,7 @@ package routinghelpers
 
 import (
 	"context"
+	"io"
 
 	ci "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -86,6 +87,18 @@ func (r Tiered) FindPeer(ctx context.Context, p peer.ID) (peer.AddrInfo, error) 
 
 func (r Tiered) Bootstrap(ctx context.Context) error {
 	return Parallel{Routers: r.Routers}.Bootstrap(ctx)
+}
+
+func (r Tiered) Close() error {
+	var me multierror.Error
+	for _, router := range r.Routers {
+		if closer, ok := router.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				me.Errors = append(me.Errors, err)
+			}
+		}
+	}
+	return me.ErrorOrNil()
 }
 
 var _ routing.Routing = Tiered{}
