@@ -16,7 +16,8 @@ type LimitedValueStore struct {
 	Namespaces []string
 }
 
-// GetPublicKey returns the public key for the given peer.
+// GetPublicKey returns the public key for the given peer, if and only if this
+// router supports the /pk namespace. Otherwise, it returns routing.ErrNotFound.
 func (lvs *LimitedValueStore) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error) {
 	for _, ns := range lvs.Namespaces {
 		if ns == "pk" {
@@ -26,7 +27,8 @@ func (lvs *LimitedValueStore) GetPublicKey(ctx context.Context, p peer.ID) (ci.P
 	return nil, routing.ErrNotFound
 }
 
-// PutValue returns ErrNotSupported
+// PutValue puts the given key in the underlying value store if the namespace
+// is supported. Otherwise, it returns routing.ErrNotSupported.
 func (lvs *LimitedValueStore) PutValue(ctx context.Context, key string, value []byte, opts ...routing.Option) error {
 	if !lvs.KeySupported(key) {
 		return routing.ErrNotSupported
@@ -51,7 +53,8 @@ func (lvs *LimitedValueStore) KeySupported(key string) bool {
 	return false
 }
 
-// GetValue returns routing.ErrNotFound if key isn't supported
+// GetValue retrieves the given key from the underlying value store if the namespace
+// is supported. Otherwise, it returns routing.ErrNotFound.
 func (lvs *LimitedValueStore) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
 	if !lvs.KeySupported(key) {
 		return nil, routing.ErrNotFound
@@ -59,8 +62,10 @@ func (lvs *LimitedValueStore) GetValue(ctx context.Context, key string, opts ...
 	return lvs.ValueStore.GetValue(ctx, key, opts...)
 }
 
-// SearchValue returns empty channel if key isn't supported or calls SearchValue
-// on the underlying ValueStore
+// SearchValue searches the underlying value store for the given key if the
+// namespace is supported, returning results in monotonically increasing
+// "freshness". Otherwise, it returns an empty, closed channel to indicate that
+// the value wasn't found.
 func (lvs *LimitedValueStore) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
 	if !lvs.KeySupported(key) {
 		out := make(chan []byte)
@@ -70,6 +75,8 @@ func (lvs *LimitedValueStore) SearchValue(ctx context.Context, key string, opts 
 	return lvs.ValueStore.SearchValue(ctx, key, opts...)
 }
 
+// Bootstrap signals the underlying value store to get into the "bootstrapped"
+// state, if it implements the Bootstrap interface.
 func (lvs *LimitedValueStore) Bootstrap(ctx context.Context) error {
 	if bs, ok := lvs.ValueStore.(Bootstrap); ok {
 		return bs.Bootstrap(ctx)
@@ -77,6 +84,8 @@ func (lvs *LimitedValueStore) Bootstrap(ctx context.Context) error {
 	return nil
 }
 
+// Close closest the underlying value store if it implements the io.Closer
+// interface.
 func (lvs *LimitedValueStore) Close() error {
 	if closer, ok := lvs.ValueStore.(io.Closer); ok {
 		return closer.Close()

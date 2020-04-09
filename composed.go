@@ -63,7 +63,10 @@ func (cr *Compose) Provide(ctx context.Context, c cid.Cid, local bool) error {
 	return cr.ContentRouting.Provide(ctx, c, local)
 }
 
-// FindProvidersAsync searches for peers who are able to provide a given key
+// FindProvidersAsync searches for peers who are able to provide a given key.
+//
+// If count > 0, it returns at most count providers. If count == 0, it returns
+// an unbounded number of providers.
 func (cr *Compose) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan peer.AddrInfo {
 	if cr.ContentRouting == nil {
 		ch := make(chan peer.AddrInfo)
