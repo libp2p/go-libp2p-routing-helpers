@@ -53,7 +53,7 @@ func (r Tiered) get(ctx context.Context, do func(routing.Routing) (interface{}, 
 }
 
 // GetValue sequentially searches each sub-router for the given key, returning
-// the from the first sub-router to complete the query.
+// the value from the first sub-router to complete the query.
 func (r Tiered) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
 	valInt, err := r.get(ctx, func(ri routing.Routing) (interface{}, error) {
 		return ri.GetValue(ctx, key, opts...)
@@ -83,9 +83,6 @@ func (r Tiered) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error) 
 // sub-routers in parallel. Provide returns success as long as a single
 // sub-router succeeds, but still waits for all sub-routers to finish before
 // returning.
-//
-// If count > 0, it returns at most count providers. If count == 0, it returns
-// an unbounded number of providers.
 func (r Tiered) Provide(ctx context.Context, c cid.Cid, local bool) error {
 	return Parallel{Routers: r.Routers}.Provide(ctx, c, local)
 }
