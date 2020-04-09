@@ -312,8 +312,12 @@ func TestParallelFindProviders(t *testing.T) {
 		if _, ok := <-d.FindProvidersAsync(ctx, cid4, 3); ok {
 			t.Fatalf("shouldn't have found this CID")
 		}
-		if _, ok := <-d.FindProvidersAsync(ctx, cid1, 0); ok {
-			t.Fatalf("should have found no CIDs")
+		count := 0
+		for range d.FindProvidersAsync(ctx, cid1, 0) {
+			count++
+		}
+		if count != 6 {
+			t.Fatalf("should have found 6 peers, found %d", count)
 		}
 
 		ctxt, cancel := context.WithTimeout(ctx, 10*time.Millisecond)

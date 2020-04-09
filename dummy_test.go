@@ -90,7 +90,7 @@ type dummyProvider map[string][]peer.ID
 
 func (d dummyProvider) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan peer.AddrInfo {
 	peers := d[c.KeyString()]
-	if len(peers) > count {
+	if count > 0 && len(peers) > count {
 		peers = peers[:count]
 	}
 	out := make(chan peer.AddrInfo)
