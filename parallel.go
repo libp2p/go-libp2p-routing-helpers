@@ -289,12 +289,17 @@ func (r Parallel) forKey(key string) Parallel {
 	})
 }
 
+// PutValue puts the given key to all sub-routers in parallel. It succeeds as
+// long as putting to at least one sub-router succeeds, but it waits for all
+// puts to terminate.
 func (r Parallel) PutValue(ctx context.Context, key string, value []byte, opts ...routing.Option) error {
 	return r.forKey(key).put(func(ri routing.Routing) error {
 		return ri.PutValue(ctx, key, value, opts...)
 	})
 }
 
+// GetValue searches all sub-routers for the given key, returning the result
+// from the first sub-router to complete the query.
 func (r Parallel) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
 	vInt, err := r.forKey(key).get(ctx, func(ri routing.Routing) (interface{}, error) {
 		return ri.GetValue(ctx, key, opts...)
@@ -303,6 +308,9 @@ func (r Parallel) GetValue(ctx context.Context, key string, opts ...routing.Opti
 	return val, err
 }
 
+// SearchValue searches all sub-routers for the given key in parallel,
+// returning results in monotonically increasing "freshness" from all
+// sub-routers.
 func (r Parallel) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
 	resCh, err := r.forKey(key).search(ctx, func(ri routing.Routing) (<-chan []byte, error) {
 		return ri.SearchValue(ctx, key, opts...)
@@ -342,6 +350,8 @@ func (r Parallel) SearchValue(ctx context.Context, key string, opts ...routing.O
 	return valid, err
 }
 
+// GetPublicKey retrieves the public key from all sub-routers in parallel,
+// returning the first result.
 func (r Parallel) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error) {
 	vInt, err := r.
 		forKey(routing.KeyForPublicKey(p)).
@@ -352,6 +362,8 @@ func (r Parallel) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error
 	return val, err
 }
 
+// FindPeer finds the given peer in all sub-routers in parallel, returning the
+// first result.
 func (r Parallel) FindPeer(ctx context.Context, p peer.ID) (peer.AddrInfo, error) {
 	vInt, err := r.filter(func(ri routing.Routing) bool {
 		return supportsPeer(ri)
@@ -362,6 +374,13 @@ func (r Parallel) FindPeer(ctx context.Context, p peer.ID) (peer.AddrInfo, error
 	return pi, err
 }
 
+// Provide announces that this peer provides the content in question to all
+// sub-routers in parallel. Provide returns success as long as a single
+// sub-router succeeds, but still waits for all sub-routers to finish before
+// returning.
+//
+// If count > 0, it returns at most count providers. If count == 0, it returns
+// an unbounded number of providers.
 func (r Parallel) Provide(ctx context.Context, c cid.Cid, local bool) error {
 	return r.filter(func(ri routing.Routing) bool {
 		return supportsContent(ri)
@@ -370,6 +389,11 @@ func (r Parallel) Provide(ctx context.Context, c cid.Cid, local bool) error {
 	})
 }
 
+// FindProvidersAsync searches all sub-routers in parallel for peers who are
+// able to provide a given key.
+//
+// If count > 0, it returns at most count providers. If count == 0, it returns
+// an unbounded number of providers.
 func (r Parallel) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan peer.AddrInfo {
 	routers := r.filter(func(ri routing.Routing) bool {
 		return supportsContent(ri)
@@ -496,6 +520,7 @@ func fewProviders(ctx context.Context, out chan<- peer.AddrInfo, in []<-chan pee
 	}
 }
 
+// Bootstrap signals all the sub-routers to bootstrap.
 func (r Parallel) Bootstrap(ctx context.Context) error {
 	var me multierror.Error
 	for _, b := range r.Routers {
@@ -506,6 +531,7 @@ func (r Parallel) Bootstrap(ctx context.Context) error {
 	return me.ErrorOrNil()
 }
 
+// Close closes all sub-routers that implement the io.Closer interface.
 func (r Parallel) Close() error {
 	var me multierror.Error
 	for _, router := range r.Routers {
