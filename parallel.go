@@ -418,7 +418,13 @@ func manyProviders(ctx context.Context, out chan<- peer.AddrInfo, in []<-chan pe
 			Chan: reflect.ValueOf(ch),
 		}
 	}
-	for count > 0 && len(selectCases) > 0 {
+
+	// If we ask for 0 providers, that means fetch _all_ providers.
+	if count == 0 {
+		count = -1
+	}
+
+	for count != 0 && len(selectCases) > 0 {
 		chosen, val, ok := reflect.Select(selectCases)
 		if !ok {
 			// Remove the channel
@@ -453,10 +459,15 @@ func fewProviders(ctx context.Context, out chan<- peer.AddrInfo, in []<-chan pee
 	cases := make([]<-chan peer.AddrInfo, 8)
 	copy(cases, in)
 
+	// If we ask for 0 providers, that means fetch _all_ providers.
+	if count == 0 {
+		count = -1
+	}
+
 	// Oh go, what would we do without you!
 	nch := len(in)
 	var pi peer.AddrInfo
-	for nch > 0 && count > 0 {
+	for nch > 0 && count != 0 {
 		var ok bool
 		var selected int
 		select {
