@@ -292,8 +292,8 @@ func (r Parallel) forKey(key string) Parallel {
 // mergeQueryEvents limits `routing.QueryError` events to only be sent on the context in case all parallel
 // routers fail.
 func (r Parallel) mergeQueryEvents(ctx context.Context) (context.Context, context.CancelFunc) {
-	subCtx, evCh := routing.RegisterForQueryEvents(ctx)
-	subCtx, cancel := context.WithCancel(subCtx)
+	subCtx, cancel := context.WithCancel(ctx)
+	subCtx, evCh := routing.RegisterForQueryEvents(subCtx)
 	go func() {
 		var errEvt *routing.QueryEvent
 		successfulEvent := false
