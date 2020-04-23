@@ -293,18 +293,20 @@ func (r Parallel) forKey(key string) Parallel {
 // routers fail.
 func (r Parallel) mergeQueryEvents(ctx context.Context) (context.Context, context.CancelFunc) {
 	subCtx, evCh := routing.RegisterForQueryEvents(ctx)
+	subCtx, cancel := context.WithCancel(subCtx)
 	go func() {
 		var errEvt *routing.QueryEvent
 		successfulEvent := false
 		for {
 			select {
-			case <-subCtx.Done():
-				if errEvt != nil && !successfulEvent {
-					routing.PublishQueryEvent(ctx, errEvt)
-				}
+			case <-ctx.Done():
 				return
+			// evCh will be closed when subCtx is canceled.
 			case ev, ok := <-evCh:
 				if !ok {
+					if errEvt != nil && !successfulEvent {
+						routing.PublishQueryEvent(ctx, errEvt)
+					}
 					return
 				}
 				if ev == nil {
@@ -319,7 +321,7 @@ func (r Parallel) mergeQueryEvents(ctx context.Context) (context.Context, contex
 			}
 		}
 	}()
-	return context.WithCancel(subCtx)
+	return subCtx, cancel
 }
 
 // PutValue puts the given key to all sub-routers in parallel. It succeeds as
