@@ -299,6 +299,9 @@ func (r Parallel) mergeQueryEvents(ctx context.Context) (context.Context, contex
 		successfulEvent := false
 		for {
 			select {
+			// Note: this is the outer context
+			// An error event may be dropped in this case, but closing due to
+			// timeout is inherently racy in that regard.
 			case <-ctx.Done():
 				return
 			// evCh will be closed when subCtx is canceled.
@@ -329,10 +332,10 @@ func (r Parallel) mergeQueryEvents(ctx context.Context) (context.Context, contex
 // puts to terminate.
 func (r Parallel) PutValue(ctx context.Context, key string, value []byte, opts ...routing.Option) error {
 	reqCtx, cancel := r.mergeQueryEvents(ctx)
+	defer cancel()
 	err := r.forKey(key).put(func(ri routing.Routing) error {
 		return ri.PutValue(reqCtx, key, value, opts...)
 	})
-	cancel()
 	return err
 }
 
@@ -340,11 +343,11 @@ func (r Parallel) PutValue(ctx context.Context, key string, value []byte, opts .
 // from the first sub-router to complete the query.
 func (r Parallel) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
 	reqCtx, cancel := r.mergeQueryEvents(ctx)
+	defer cancel()
 	vInt, err := r.forKey(key).get(reqCtx, func(ri routing.Routing) (interface{}, error) {
 		return ri.GetValue(reqCtx, key, opts...)
 	})
 	val, _ := vInt.([]byte)
-	cancel()
 	return val, err
 }
 
@@ -388,7 +391,6 @@ func (r Parallel) SearchValue(ctx context.Context, key string, opts ...routing.O
 				return
 			}
 		}
-		cancel()
 	}()
 
 	return valid, err
@@ -410,13 +412,13 @@ func (r Parallel) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error
 // first result.
 func (r Parallel) FindPeer(ctx context.Context, p peer.ID) (peer.AddrInfo, error) {
 	reqCtx, cancel := r.mergeQueryEvents(ctx)
+	defer cancel()
 	vInt, err := r.filter(func(ri routing.Routing) bool {
 		return supportsPeer(ri)
 	}).get(ctx, func(ri routing.Routing) (interface{}, error) {
 		return ri.FindPeer(reqCtx, p)
 	})
 	pi, _ := vInt.(peer.AddrInfo)
-	cancel()
 	return pi, err
 }
 
@@ -464,13 +466,13 @@ func (r Parallel) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) 
 	}
 
 	go func() {
+		defer cancel()
 		defer close(out)
 		if len(providers) > 8 {
 			manyProviders(reqCtx, out, providers, count)
 		} else {
 			fewProviders(reqCtx, out, providers, count)
 		}
-		cancel()
 	}()
 	return out
 }
