@@ -289,20 +289,63 @@ func (r Parallel) forKey(key string) Parallel {
 	})
 }
 
+// mergeQueryEvents limits `routing.QueryError` events to only be sent on the context in case all parallel
+// routers fail.
+func (r Parallel) mergeQueryEvents(ctx context.Context) (context.Context, context.CancelFunc) {
+	subCtx, cancel := context.WithCancel(ctx)
+	subCtx, evCh := routing.RegisterForQueryEvents(subCtx)
+	go func() {
+		var errEvt *routing.QueryEvent
+		successfulEvent := false
+		for {
+			select {
+			// Note: this is the outer context
+			// An error event may be dropped in this case, but closing due to
+			// timeout is inherently racy in that regard.
+			case <-ctx.Done():
+				return
+			// evCh will be closed when subCtx is canceled.
+			case ev, ok := <-evCh:
+				if !ok {
+					if errEvt != nil && !successfulEvent {
+						routing.PublishQueryEvent(ctx, errEvt)
+					}
+					return
+				}
+				if ev == nil {
+					continue
+				}
+				if ev.Type == routing.QueryError {
+					errEvt = ev
+					continue
+				}
+				successfulEvent = true
+				routing.PublishQueryEvent(ctx, ev)
+			}
+		}
+	}()
+	return subCtx, cancel
+}
+
 // PutValue puts the given key to all sub-routers in parallel. It succeeds as
 // long as putting to at least one sub-router succeeds, but it waits for all
 // puts to terminate.
 func (r Parallel) PutValue(ctx context.Context, key string, value []byte, opts ...routing.Option) error {
-	return r.forKey(key).put(func(ri routing.Routing) error {
-		return ri.PutValue(ctx, key, value, opts...)
+	reqCtx, cancel := r.mergeQueryEvents(ctx)
+	defer cancel()
+	err := r.forKey(key).put(func(ri routing.Routing) error {
+		return ri.PutValue(reqCtx, key, value, opts...)
 	})
+	return err
 }
 
 // GetValue searches all sub-routers for the given key, returning the result
 // from the first sub-router to complete the query.
 func (r Parallel) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
-	vInt, err := r.forKey(key).get(ctx, func(ri routing.Routing) (interface{}, error) {
-		return ri.GetValue(ctx, key, opts...)
+	reqCtx, cancel := r.mergeQueryEvents(ctx)
+	defer cancel()
+	vInt, err := r.forKey(key).get(reqCtx, func(ri routing.Routing) (interface{}, error) {
+		return ri.GetValue(reqCtx, key, opts...)
 	})
 	val, _ := vInt.([]byte)
 	return val, err
@@ -312,10 +355,12 @@ func (r Parallel) GetValue(ctx context.Context, key string, opts ...routing.Opti
 // returning results in monotonically increasing "freshness" from all
 // sub-routers.
 func (r Parallel) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
-	resCh, err := r.forKey(key).search(ctx, func(ri routing.Routing) (<-chan []byte, error) {
-		return ri.SearchValue(ctx, key, opts...)
+	reqCtx, cancel := r.mergeQueryEvents(ctx)
+	resCh, err := r.forKey(key).search(reqCtx, func(ri routing.Routing) (<-chan []byte, error) {
+		return ri.SearchValue(reqCtx, key, opts...)
 	})
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
@@ -323,6 +368,7 @@ func (r Parallel) SearchValue(ctx context.Context, key string, opts ...routing.O
 	var best []byte
 	go func() {
 		defer close(valid)
+		defer cancel()
 
 		for v := range resCh {
 			if best != nil {
@@ -365,10 +411,12 @@ func (r Parallel) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, error
 // FindPeer finds the given peer in all sub-routers in parallel, returning the
 // first result.
 func (r Parallel) FindPeer(ctx context.Context, p peer.ID) (peer.AddrInfo, error) {
+	reqCtx, cancel := r.mergeQueryEvents(ctx)
+	defer cancel()
 	vInt, err := r.filter(func(ri routing.Routing) bool {
 		return supportsPeer(ri)
 	}).get(ctx, func(ri routing.Routing) (interface{}, error) {
-		return ri.FindPeer(ctx, p)
+		return ri.FindPeer(reqCtx, p)
 	})
 	pi, _ := vInt.(peer.AddrInfo)
 	return pi, err
@@ -410,20 +458,20 @@ func (r Parallel) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) 
 
 	out := make(chan peer.AddrInfo)
 
-	ctx, cancel := context.WithCancel(ctx)
+	reqCtx, cancel := r.mergeQueryEvents(ctx)
 
 	providers := make([]<-chan peer.AddrInfo, len(routers.Routers))
 	for i, ri := range routers.Routers {
-		providers[i] = ri.FindProvidersAsync(ctx, c, count)
+		providers[i] = ri.FindProvidersAsync(reqCtx, c, count)
 	}
 
 	go func() {
 		defer cancel()
 		defer close(out)
 		if len(providers) > 8 {
-			manyProviders(ctx, out, providers, count)
+			manyProviders(reqCtx, out, providers, count)
 		} else {
-			fewProviders(ctx, out, providers, count)
+			fewProviders(reqCtx, out, providers, count)
 		}
 	}()
 	return out
