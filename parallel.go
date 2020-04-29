@@ -293,6 +293,10 @@ func (r Parallel) forKey(key string) Parallel {
 // routers fail.
 func (r Parallel) mergeQueryEvents(ctx context.Context) (context.Context, context.CancelFunc) {
 	subCtx, cancel := context.WithCancel(ctx)
+	if !routing.SubscribesToQueryEvents(ctx) {
+		return subCtx, cancel
+	}
+
 	subCtx, evCh := routing.RegisterForQueryEvents(subCtx)
 	go func() {
 		var errEvt *routing.QueryEvent
