@@ -9,7 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
 
-	cid "github.com/ipfs/go-cid"
+	"github.com/ipfs/go-cid"
 )
 
 type testCloser struct {
@@ -23,17 +23,17 @@ func (closer *testCloser) Close() error {
 
 type failValueStore struct{}
 
-var failValueErr = errors.New("fail valuestore error")
+var errFailValue = errors.New("fail valuestore error")
 
 func (f failValueStore) PutValue(ctx context.Context, key string, value []byte, opts ...routing.Option) error {
-	return failValueErr
+	return errFailValue
 }
 func (f failValueStore) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
-	return nil, failValueErr
+	return nil, errFailValue
 }
 
 func (f failValueStore) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
-	return nil, failValueErr
+	return nil, errFailValue
 }
 
 type dummyValueStore sync.Map
