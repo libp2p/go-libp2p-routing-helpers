@@ -9,8 +9,8 @@ import (
 
 	record "github.com/libp2p/go-libp2p-record"
 
-	errwrap "github.com/hashicorp/errwrap"
-	cid "github.com/ipfs/go-cid"
+	"github.com/hashicorp/errwrap"
+	"github.com/ipfs/go-cid"
 )
 
 type testValidator struct{}
@@ -100,8 +100,7 @@ func TestTieredSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	v, ok = <-valch
-	if !ok {
+	if _, ok := <-valch; !ok {
 		t.Fatal("expected to get a value")
 	}
 

@@ -143,8 +143,8 @@ func TestParallelPutFailure(t *testing.T) {
 		},
 	}
 	err := router.PutValue(ctx, "/some/thing", []byte("thing"))
-	if err != failValueErr {
-		t.Fatalf("exected put to fail with %q, got %q", failValueErr, err)
+	if err != errFailValue {
+		t.Fatalf("exected put to fail with %q, got %q", errFailValue, err)
 	}
 }
 

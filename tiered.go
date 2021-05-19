@@ -8,8 +8,8 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
 
-	multierror "github.com/hashicorp/go-multierror"
-	cid "github.com/ipfs/go-cid"
+	"github.com/hashicorp/go-multierror"
+	"github.com/ipfs/go-cid"
 	record "github.com/libp2p/go-libp2p-record"
 )
 
@@ -66,7 +66,7 @@ func (r Tiered) GetValue(ctx context.Context, key string, opts ...routing.Option
 // returning results in monotonically increasing "freshness" from all
 // sub-routers.
 func (r Tiered) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
-	return Parallel{Routers: r.Routers, Validator: r.Validator}.SearchValue(ctx, key, opts...)
+	return Parallel(r).SearchValue(ctx, key, opts...)
 }
 
 // GetPublicKey sequentially searches each sub-router for the the public key,
