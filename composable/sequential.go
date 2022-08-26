@@ -50,13 +50,21 @@ func (r *Sequential) FindProvidersAsync(ctx context.Context, cid cid.Cid, count 
 			g.Add(1)
 			go func() {
 				defer g.Done()
-				for addr := range rch {
-					if sentCount >= count {
-						break
-					}
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case v, ok := <-rch:
+						if !ok {
+							break
+						}
+						if sentCount >= count {
+							break
+						}
 
-					chanOut <- addr
-					sentCount++
+						chanOut <- v
+						sentCount++
+					}
 				}
 			}()
 
