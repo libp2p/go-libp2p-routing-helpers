@@ -56,10 +56,10 @@ func (r *Sequential) FindProvidersAsync(ctx context.Context, cid cid.Cid, count 
 						return
 					case v, ok := <-rch:
 						if !ok {
-							break
+							return
 						}
 						if sentCount >= count {
-							break
+							return
 						}
 
 						chanOut <- v
@@ -167,22 +167,25 @@ func (r *Sequential) SearchValue(ctx context.Context, key string, opts ...routin
 
 	go func() {
 		for i := 0; i < len(chans); i++ {
-			defer cancels[i]()
 			if chans[i] == nil {
+				cancels[i]()
 				continue
 			}
 
+		forr:
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case v, ok := <-chans[i]:
 					if !ok {
-						break
+						break forr
 					}
 					chanOut <- v
 				}
 			}
+
+			cancels[i]()
 		}
 	}()
 
