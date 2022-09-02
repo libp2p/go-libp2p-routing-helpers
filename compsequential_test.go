@@ -12,10 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestComposableParallelFixtures(t *testing.T) {
+func TestComposableSequentialFixtures(t *testing.T) {
+	t.Skip("ongoing")
 	fixtures := []struct {
 		Name             string
-		routers          []*ParallelRouter
+		routers          []*SequentialRouter
 		GetValueFixtures []struct {
 			err            error
 			key            string
@@ -36,8 +37,8 @@ func TestComposableParallelFixtures(t *testing.T) {
 		}
 	}{
 		{
-			Name: "simple two routers, one with delay",
-			routers: []*ParallelRouter{
+			Name: "simple two routers",
+			routers: []*SequentialRouter{
 				{
 					Timeout:     time.Second,
 					IgnoreError: false,
@@ -48,9 +49,8 @@ func TestComposableParallelFixtures(t *testing.T) {
 					},
 				},
 				{
-					Timeout:      time.Minute,
-					IgnoreError:  false,
-					ExecuteAfter: time.Second,
+					Timeout:     time.Minute,
+					IgnoreError: false,
 					Router: &Compose{
 						ValueStore:     newDummyValueStore(t, []string{"a", "d"}, []string{"av2", "dv"}),
 						PeerRouting:    newDummyPeerRouting(t, []peer.ID{"pid1", "pid3"}),
@@ -65,9 +65,7 @@ func TestComposableParallelFixtures(t *testing.T) {
 				searchValCount int
 			}{
 				{
-					key:            "d",
-					value:          "dv",
-					searchValCount: 1,
+					key: "d",
 				},
 				{
 					key:            "a",
@@ -111,7 +109,7 @@ func TestComposableParallelFixtures(t *testing.T) {
 		},
 		{
 			Name: "two routers with ignore errors",
-			routers: []*ParallelRouter{
+			routers: []*SequentialRouter{
 				{
 					Timeout:     time.Second,
 					IgnoreError: true,
@@ -122,9 +120,8 @@ func TestComposableParallelFixtures(t *testing.T) {
 					},
 				},
 				{
-					Timeout:      time.Minute,
-					IgnoreError:  true,
-					ExecuteAfter: time.Second,
+					Timeout:     time.Minute,
+					IgnoreError: true,
 					Router: &Compose{
 						ValueStore:     newDummyValueStore(t, []string{"d"}, []string{"dv"}),
 						PeerRouting:    newDummyPeerRouting(t, []peer.ID{"pid1", "pid3"}),
@@ -177,7 +174,7 @@ func TestComposableParallelFixtures(t *testing.T) {
 		},
 		{
 			Name: "two routers with ignore errors no delay",
-			routers: []*ParallelRouter{
+			routers: []*SequentialRouter{
 				{
 					Timeout:     time.Second,
 					IgnoreError: true,
@@ -251,7 +248,7 @@ func TestComposableParallelFixtures(t *testing.T) {
 		},
 		{
 			Name: "two routers one value store failing always",
-			routers: []*ParallelRouter{
+			routers: []*SequentialRouter{
 				{
 					Timeout:     time.Second,
 					IgnoreError: false,
@@ -262,9 +259,8 @@ func TestComposableParallelFixtures(t *testing.T) {
 					},
 				},
 				{
-					Timeout:      time.Minute,
-					IgnoreError:  false,
-					ExecuteAfter: time.Minute,
+					Timeout:     time.Minute,
+					IgnoreError: false,
 					Router: &Compose{
 						ValueStore:     newDummyValueStore(t, []string{"d", "e"}, []string{"dv", "ev"}),
 						PeerRouting:    Null{},
@@ -292,7 +288,7 @@ func TestComposableParallelFixtures(t *testing.T) {
 		},
 		{
 			Name: "two routers one value store failing always but ignored",
-			routers: []*ParallelRouter{
+			routers: []*SequentialRouter{
 				{
 					Timeout:     time.Second,
 					IgnoreError: true,
@@ -335,9 +331,8 @@ func TestComposableParallelFixtures(t *testing.T) {
 	for _, f := range fixtures {
 		f := f
 		t.Run(f.Name, func(t *testing.T) {
-			t.Parallel()
 			require := require.New(t)
-			cpr := NewComposableParallel(f.routers)
+			cpr := NewComposableSequential(f.routers)
 			for _, gvf := range f.GetValueFixtures {
 				val, err := cpr.GetValue(context.Background(), gvf.key)
 				if gvf.err != nil {
@@ -398,32 +393,4 @@ func TestComposableParallelFixtures(t *testing.T) {
 			}
 		})
 	}
-}
-
-func newDummyPeerRouting(t testing.TB, ids []peer.ID) routing.PeerRouting {
-	pr := dummyPeerRouter{}
-	for _, id := range ids {
-		pr[id] = struct{}{}
-	}
-
-	return pr
-}
-
-func newDummyValueStore(t testing.TB, keys []string, values []string) routing.ValueStore {
-	t.Helper()
-
-	if len(keys) != len(values) {
-		t.Fatal("keys and values must be the same amount")
-	}
-
-	dvs := &dummyValueStore{}
-	for i, k := range keys {
-		v := values[i]
-		err := dvs.PutValue(context.TODO(), k, []byte(v))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	return dvs
 }
