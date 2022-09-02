@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/libp2p/go-libp2p-core/routing"
-	"github.com/libp2p/go-libp2p-core/test"
+	"github.com/libp2p/go-libp2p/core/routing"
+	"github.com/libp2p/go-libp2p/core/test"
 )
 
 func TestGetPublicKey(t *testing.T) {

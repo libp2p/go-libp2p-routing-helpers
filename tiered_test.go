@@ -5,12 +5,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/libp2p/go-libp2p-core/routing"
-
-	record "github.com/libp2p/go-libp2p-record"
-
 	"github.com/hashicorp/errwrap"
 	"github.com/ipfs/go-cid"
+	record "github.com/libp2p/go-libp2p-record"
+	"github.com/libp2p/go-libp2p/core/routing"
 )
 
 type testValidator struct{}
