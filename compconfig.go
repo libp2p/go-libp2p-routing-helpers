@@ -1,4 +1,4 @@
-package composable
+package routinghelpers
 
 import (
 	"time"
@@ -7,15 +7,13 @@ import (
 )
 
 type ParallelRouter struct {
-	config
+	Timeout      time.Duration
+	IgnoreError  bool
+	Router       routing.Routing
 	ExecuteAfter time.Duration
 }
 
 type SequentialRouter struct {
-	config
-}
-
-type config struct {
 	Timeout     time.Duration
 	IgnoreError bool
 	Router      routing.Routing
