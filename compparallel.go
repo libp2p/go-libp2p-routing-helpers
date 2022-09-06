@@ -31,7 +31,7 @@ func NewComposableParallel(routers []*ParallelRouter) *ComposableParallel {
 
 // Provide will call all Routers in parallel.
 func (r *ComposableParallel) Provide(ctx context.Context, cid cid.Cid, provide bool) error {
-	return execute(ctx, r.routers,
+	return executeParallel(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) error {
 			return r.Provide(ctx, cid, provide)
 		},
@@ -43,7 +43,7 @@ func (r *ComposableParallel) Provide(ctx context.Context, cid cid.Cid, provide b
 // To gather providers from a set of Routers first, you can use the ExecuteAfter timer to delay some Router execution.
 func (r *ComposableParallel) FindProvidersAsync(ctx context.Context, cid cid.Cid, count int) <-chan peer.AddrInfo {
 	var totalCount int64
-	ch, _ := getChannelOrError(
+	ch, _ := getChannelOrErrorParallel(
 		ctx,
 		r.routers,
 		func(ctx context.Context, r routing.Routing) (<-chan peer.AddrInfo, error) {
@@ -59,7 +59,7 @@ func (r *ComposableParallel) FindProvidersAsync(ctx context.Context, cid cid.Cid
 
 // FindPeer will execute all Routers in parallel, getting the first AddrInfo found and cancelling all other Router calls.
 func (r *ComposableParallel) FindPeer(ctx context.Context, id peer.ID) (peer.AddrInfo, error) {
-	return getValueOrError(ctx, r.routers,
+	return getValueOrErrorParallel(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) (peer.AddrInfo, error) {
 			return r.FindPeer(ctx, id)
 		},
@@ -71,7 +71,7 @@ func (r *ComposableParallel) FindPeer(ctx context.Context, id peer.ID) (peer.Add
 // PutValue will execute all Routers in parallel. If a Router fails and IgnoreError flag is not set, the whole execution will fail.
 // Some Puts before the failure might be successful, even if we return an error.
 func (r *ComposableParallel) PutValue(ctx context.Context, key string, val []byte, opts ...routing.Option) error {
-	return execute(ctx, r.routers,
+	return executeParallel(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) error {
 			return r.PutValue(ctx, key, val, opts...)
 		},
@@ -80,7 +80,7 @@ func (r *ComposableParallel) PutValue(ctx context.Context, key string, val []byt
 
 // GetValue will execute all Routers in parallel. The first value found will be returned, cancelling all other executions.
 func (r *ComposableParallel) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
-	return getValueOrError(ctx, r.routers,
+	return getValueOrErrorParallel(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) ([]byte, error) {
 			return r.GetValue(ctx, key, opts...)
 		},
@@ -90,7 +90,7 @@ func (r *ComposableParallel) GetValue(ctx context.Context, key string, opts ...r
 }
 
 func (r *ComposableParallel) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
-	return getChannelOrError(
+	return getChannelOrErrorParallel(
 		ctx,
 		r.routers,
 		func(ctx context.Context, r routing.Routing) (<-chan []byte, error) {
@@ -101,13 +101,13 @@ func (r *ComposableParallel) SearchValue(ctx context.Context, key string, opts .
 }
 
 func (r *ComposableParallel) Bootstrap(ctx context.Context) error {
-	return execute(ctx, r.routers,
+	return executeParallel(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) error {
 			return r.Bootstrap(ctx)
 		})
 }
 
-func getValueOrError[T any](
+func getValueOrErrorParallel[T any](
 	ctx context.Context,
 	routers []*ParallelRouter,
 	f func(context.Context, routing.Routing) (T, error),
@@ -181,7 +181,7 @@ func getValueOrError[T any](
 	}
 }
 
-func execute(
+func executeParallel(
 	ctx context.Context,
 	routers []*ParallelRouter,
 	f func(context.Context, routing.Routing,
@@ -224,7 +224,7 @@ func execute(
 	return errOut
 }
 
-func getChannelOrError[T any](
+func getChannelOrErrorParallel[T any](
 	ctx context.Context,
 	routers []*ParallelRouter,
 	f func(context.Context, routing.Routing) (<-chan T, error),

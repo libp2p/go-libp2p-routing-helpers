@@ -2,6 +2,8 @@ package routinghelpers
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"sync/atomic"
 
 	"github.com/ipfs/go-cid"
@@ -25,9 +27,120 @@ func NewComposableSequential(routers []*SequentialRouter) *ComposableSequential 
 // If some router fails and the IgnoreError flag is true, we continue to the next router.
 // Context timeout error will be also ignored if the flag is set.
 func (r *ComposableSequential) Provide(ctx context.Context, cid cid.Cid, provide bool) error {
-	for _, router := range r.routers {
+	return executeSequential(ctx, r.routers, func(ctx context.Context, r routing.Routing) error {
+		return r.Provide(ctx, cid, provide)
+	})
+}
+
+// FindProvidersAsync calls FindProvidersAsync per each router sequentially.
+// If some router fails and the IgnoreError flag is true, we continue to the next router.
+// Context timeout error will be also ignored if the flag is set.
+// If count is set, the channel will return up to count results, stopping routers iteration.
+func (r *ComposableSequential) FindProvidersAsync(ctx context.Context, cid cid.Cid, count int) <-chan peer.AddrInfo {
+	var totalCount int64
+	ch, _ := getChannelOrErrorSequential(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) (<-chan peer.AddrInfo, error) {
+			return r.FindProvidersAsync(ctx, cid, count), nil
+		},
+		func() bool {
+			return atomic.AddInt64(&totalCount, 1) > int64(count) && count != 0
+		},
+	)
+
+	return ch
+}
+
+// FindPeer calls FindPeer per each router sequentially.
+// If some router fails and the IgnoreError flag is true, we continue to the next router.
+// Context timeout error will be also ignored if the flag is set.
+func (r *ComposableSequential) FindPeer(ctx context.Context, pid peer.ID) (peer.AddrInfo, error) {
+	return getValueOrErrorSequential(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) (peer.AddrInfo, error) {
+			return r.FindPeer(ctx, pid)
+		},
+		func(p peer.AddrInfo) bool {
+			return p.ID == ""
+		},
+	)
+}
+
+// If some router fails and the IgnoreError flag is true, we continue to the next router.
+// Context timeout error will be also ignored if the flag is set.
+func (r *ComposableSequential) PutValue(ctx context.Context, key string, val []byte, opts ...routing.Option) error {
+	return executeSequential(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) error {
+			return r.PutValue(ctx, key, val, opts...)
+		})
+}
+
+// If some router fails and the IgnoreError flag is true, we continue to the next router.
+// Context timeout error will be also ignored if the flag is set.
+func (r *ComposableSequential) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
+	return getValueOrErrorSequential(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) ([]byte, error) {
+			return r.GetValue(ctx, key, opts...)
+		},
+		func(b []byte) bool { return len(b) == 0 },
+	)
+}
+
+// If some router fails and the IgnoreError flag is true, we continue to the next router.
+// Context timeout error will be also ignored if the flag is set.
+func (r *ComposableSequential) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
+	return getChannelOrErrorSequential(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) (<-chan []byte, error) {
+			return r.SearchValue(ctx, key, opts...)
+		},
+		func() bool { return false },
+	)
+
+}
+
+// If some router fails and the IgnoreError flag is true, we continue to the next router.
+// Context timeout error will be also ignored if the flag is set.
+func (r *ComposableSequential) Bootstrap(ctx context.Context) error {
+	return executeSequential(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) error {
+			return r.Bootstrap(ctx)
+		},
+	)
+}
+
+func getValueOrErrorSequential[T any](
+	ctx context.Context,
+	routers []*SequentialRouter,
+	f func(context.Context, routing.Routing) (T, error),
+	isEmpty func(T) bool,
+) (value T, err error) {
+	for _, router := range routers {
 		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
-		if err := router.Router.Provide(ctx, cid, provide); err != nil &&
+		defer cancel()
+		value, err := f(ctx, router.Router)
+		if err != nil &&
+			!errors.Is(err, routing.ErrNotFound) &&
+			!router.IgnoreError {
+			return value, err
+		}
+
+		if isEmpty(value) {
+			continue
+		}
+
+		return value, nil
+	}
+
+	return value, routing.ErrNotFound
+}
+
+func executeSequential(
+	ctx context.Context,
+	routers []*SequentialRouter,
+	f func(context.Context, routing.Routing,
+	) error) error {
+	for _, router := range routers {
+		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
+		if err := f(ctx, router.Router); err != nil &&
+			!errors.Is(err, routing.ErrNotFound) &&
 			!router.IgnoreError {
 			cancel()
 			return err
@@ -38,115 +151,21 @@ func (r *ComposableSequential) Provide(ctx context.Context, cid cid.Cid, provide
 	return nil
 }
 
-// FindProvidersAsync calls FindProvidersAsync per each router sequentially.
-// If some router fails and the IgnoreError flag is true, we continue to the next router.
-// Context timeout error will be also ignored if the flag is set.
-// If count is set, the channel will return up to count results, stopping routers iteration.
-func (r *ComposableSequential) FindProvidersAsync(ctx context.Context, cid cid.Cid, count int) <-chan peer.AddrInfo {
-	chanOut := make(chan peer.AddrInfo)
-	var totalCount int64
-	go func() {
-		for _, router := range r.routers {
-			ctx, cancel := context.WithTimeout(ctx, router.Timeout)
-			defer cancel()
-			rch := router.Router.FindProvidersAsync(ctx, cid, count)
-		f:
-			for {
-				select {
-				case <-ctx.Done():
-					break f
-				case v, ok := <-rch:
-					if !ok {
-						break f
-					}
-					if totalCount >= int64(count) {
-						close(chanOut)
-						return
-					}
-
-					select {
-					case <-ctx.Done():
-						break f
-					case chanOut <- v:
-						atomic.AddInt64(&totalCount, 1)
-					}
-				}
-			}
-		}
-	}()
-
-	return chanOut
-}
-
-// FindPeer calls FindPeer per each router sequentially.
-// If some router fails and the IgnoreError flag is true, we continue to the next router.
-// Context timeout error will be also ignored if the flag is set.
-func (r *ComposableSequential) FindPeer(ctx context.Context, pid peer.ID) (peer.AddrInfo, error) {
-	for _, router := range r.routers {
-		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
-		defer cancel()
-		addrInfo, err := router.Router.FindPeer(ctx, pid)
-		if err != nil &&
-			!router.IgnoreError {
-			return peer.AddrInfo{}, err
-		}
-
-		if err == nil {
-			return addrInfo, nil
-		}
-	}
-
-	return peer.AddrInfo{}, routing.ErrNotFound
-}
-
-// If some router fails and the IgnoreError flag is true, we continue to the next router.
-// Context timeout error will be also ignored if the flag is set.
-func (r *ComposableSequential) PutValue(ctx context.Context, key string, val []byte, opts ...routing.Option) error {
-	for _, router := range r.routers {
-		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
-		defer cancel()
-		if err := router.Router.PutValue(ctx, key, val, opts...); err != nil &&
-			!router.IgnoreError {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// If some router fails and the IgnoreError flag is true, we continue to the next router.
-// Context timeout error will be also ignored if the flag is set.
-func (r *ComposableSequential) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
-	for _, router := range r.routers {
-		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
-		defer cancel()
-		val, err := router.Router.GetValue(ctx, key, opts...)
-		if err != nil &&
-			!router.IgnoreError {
-			return nil, err
-		}
-
-		if val == nil {
-			continue
-		}
-
-		return val, nil
-	}
-
-	return nil, routing.ErrNotFound
-}
-
-// If some router fails and the IgnoreError flag is true, we continue to the next router.
-// Context timeout error will be also ignored if the flag is set.
-func (r *ComposableSequential) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
-	chanOut := make(chan []byte)
-	var chans []<-chan []byte
+func getChannelOrErrorSequential[T any](
+	ctx context.Context,
+	routers []*SequentialRouter,
+	f func(context.Context, routing.Routing) (<-chan T, error),
+	shouldStop func() bool,
+) (chan T, error) {
+	chanOut := make(chan T)
+	var chans []<-chan T
 	var cancels []context.CancelFunc
 
-	for _, router := range r.routers {
+	for _, router := range routers {
 		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
-		rch, err := router.Router.SearchValue(ctx, key, opts...)
+		rch, err := f(ctx, router.Router)
 		if err != nil &&
+			!errors.Is(err, routing.ErrNotFound) &&
 			!router.IgnoreError {
 			cancel()
 			return nil, err
@@ -156,7 +175,10 @@ func (r *ComposableSequential) SearchValue(ctx context.Context, key string, opts
 		chans = append(chans, rch)
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for i := 0; i < len(chans); i++ {
 			if chans[i] == nil {
 				cancels[i]()
@@ -167,7 +189,7 @@ func (r *ComposableSequential) SearchValue(ctx context.Context, key string, opts
 			for {
 				select {
 				case <-ctx.Done():
-					return
+					break f
 				case v, ok := <-chans[i]:
 					if !ok {
 						break f
@@ -180,21 +202,10 @@ func (r *ComposableSequential) SearchValue(ctx context.Context, key string, opts
 		}
 	}()
 
+	go func() {
+		wg.Wait()
+		close(chanOut)
+	}()
+
 	return chanOut, nil
-
-}
-
-// If some router fails and the IgnoreError flag is true, we continue to the next router.
-// Context timeout error will be also ignored if the flag is set.
-func (r *ComposableSequential) Bootstrap(ctx context.Context) error {
-	for _, router := range r.routers {
-		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
-		defer cancel()
-		if err := router.Router.Bootstrap(ctx); err != nil &&
-			!router.IgnoreError {
-			return err
-		}
-	}
-
-	return nil
 }

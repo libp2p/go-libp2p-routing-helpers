@@ -13,7 +13,6 @@ import (
 )
 
 func TestComposableSequentialFixtures(t *testing.T) {
-	t.Skip("ongoing")
 	fixtures := []struct {
 		Name             string
 		routers          []*SequentialRouter
@@ -65,7 +64,9 @@ func TestComposableSequentialFixtures(t *testing.T) {
 				searchValCount int
 			}{
 				{
-					key: "d",
+					key:            "d",
+					value:          "dv",
+					searchValCount: 1,
 				},
 				{
 					key:            "a",
@@ -79,7 +80,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 				value string
 			}{
 				{
-					err:   errors.New("2 errors occurred:\n\t* a\n\t* a\n\n"),
+					err:   errors.New("a"),
 					key:   "/error/a",
 					value: "a",
 				},
@@ -92,7 +93,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 				err error
 			}{
 				{
-					err: errors.New("2 errors occurred:\n\t* routing: operation or key not supported\n\t* routing: operation or key not supported\n\n"),
+					err: routing.ErrNotSupported,
 				},
 			},
 			FindPeerFixtures: []struct {
@@ -331,6 +332,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 	for _, f := range fixtures {
 		f := f
 		t.Run(f.Name, func(t *testing.T) {
+			t.Parallel()
 			require := require.New(t)
 			cpr := NewComposableSequential(f.routers)
 			for _, gvf := range f.GetValueFixtures {
