@@ -42,54 +42,19 @@ func (r *ComposableParallel) Provide(ctx context.Context, cid cid.Cid, provide b
 // If count is set, only that amount of elements will be returned without any specification about from what router is obtained.
 // To gather providers from a set of Routers first, you can use the ExecuteAfter timer to delay some Router execution.
 func (r *ComposableParallel) FindProvidersAsync(ctx context.Context, cid cid.Cid, count int) <-chan peer.AddrInfo {
-	addrChanOut := make(chan peer.AddrInfo)
 	var totalCount int64
-	var wg sync.WaitGroup
-	for _, r := range r.routers {
-		r := r
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tim := time.NewTimer(r.ExecuteAfter)
-			defer tim.Stop()
-			select {
-			case <-ctx.Done():
-				return
-			case <-tim.C:
-				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
-				defer cancel()
-				addrChan := r.Router.FindProvidersAsync(ctx, cid, count)
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case addr, ok := <-addrChan:
-						if !ok {
-							return
-						}
+	ch, _ := getChannelOrError(
+		ctx,
+		r.routers,
+		func(ctx context.Context, r routing.Routing) (<-chan peer.AddrInfo, error) {
+			return r.FindProvidersAsync(ctx, cid, count), nil
+		},
+		func() bool {
+			return atomic.AddInt64(&totalCount, 1) > int64(count) && count != 0
+		},
+	)
 
-						if atomic.AddInt64(&totalCount, 1) > int64(count) && count != 0 {
-							return
-						}
-
-						select {
-						case <-ctx.Done():
-							return
-						case addrChanOut <- addr:
-						}
-
-					}
-				}
-			}
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(addrChanOut)
-	}()
-
-	return addrChanOut
+	return ch
 }
 
 // FindPeer will execute all Routers in parallel, getting the first AddrInfo found and cancelling all other Router calls.
@@ -125,67 +90,14 @@ func (r *ComposableParallel) GetValue(ctx context.Context, key string, opts ...r
 }
 
 func (r *ComposableParallel) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
-	outCh := make(chan []byte)
-	errCh := make(chan error)
-	var wg sync.WaitGroup
-	for _, r := range r.routers {
-		r := r
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tim := time.NewTimer(r.ExecuteAfter)
-			defer tim.Stop()
-			select {
-			case <-ctx.Done():
-				return
-			case <-tim.C:
-				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
-				defer cancel()
-				valueChan, err := r.Router.SearchValue(ctx, key, opts...)
-				if err != nil && !r.IgnoreError {
-					select {
-					case <-ctx.Done():
-					case errCh <- err:
-					}
-					return
-				}
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case val, ok := <-valueChan:
-						if !ok {
-							return
-						}
-						select {
-						case <-ctx.Done():
-							return
-						case outCh <- val:
-						}
-					}
-				}
-			}
-		}()
-	}
-
-	// goroutine closing everything when finishing execution
-	go func() {
-		wg.Wait()
-		close(outCh)
-		close(errCh)
-	}()
-
-	select {
-	case err, ok := <-errCh:
-		if !ok {
-			return nil, routing.ErrNotFound
-		}
-		return nil, err
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-		return outCh, nil
-	}
+	return getChannelOrError(
+		ctx,
+		r.routers,
+		func(ctx context.Context, r routing.Routing) (<-chan []byte, error) {
+			return r.SearchValue(ctx, key, opts...)
+		},
+		func() bool { return false },
+	)
 }
 
 func (r *ComposableParallel) Bootstrap(ctx context.Context) error {
@@ -310,4 +222,77 @@ func execute(
 	}
 
 	return errOut
+}
+
+func getChannelOrError[T any](
+	ctx context.Context,
+	routers []*ParallelRouter,
+	f func(context.Context, routing.Routing) (<-chan T, error),
+	shouldStop func() bool,
+) (chan T, error) {
+	outCh := make(chan T)
+	errCh := make(chan error)
+	var wg sync.WaitGroup
+	for _, r := range routers {
+		wg.Add(1)
+		go func(r *ParallelRouter) {
+			defer wg.Done()
+			tim := time.NewTimer(r.ExecuteAfter)
+			defer tim.Stop()
+			select {
+			case <-ctx.Done():
+				return
+			case <-tim.C:
+				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
+				defer cancel()
+				valueChan, err := f(ctx, r.Router)
+				if err != nil && !r.IgnoreError {
+					select {
+					case <-ctx.Done():
+					case errCh <- err:
+					}
+					return
+				}
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case val, ok := <-valueChan:
+						if !ok {
+							return
+						}
+
+						if shouldStop() {
+							return
+						}
+
+						select {
+						case <-ctx.Done():
+							return
+						case outCh <- val:
+						}
+					}
+				}
+			}
+		}(r)
+	}
+
+	// goroutine closing everything when finishing execution
+	go func() {
+		wg.Wait()
+		close(outCh)
+		close(errCh)
+	}()
+
+	select {
+	case err, ok := <-errCh:
+		if !ok {
+			return nil, routing.ErrNotFound
+		}
+		return nil, err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		return outCh, nil
+	}
 }
