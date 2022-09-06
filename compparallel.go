@@ -31,43 +31,11 @@ func NewComposableParallel(routers []*ParallelRouter) *ComposableParallel {
 
 // Provide will call all Routers in parallel.
 func (r *ComposableParallel) Provide(ctx context.Context, cid cid.Cid, provide bool) error {
-	var wg sync.WaitGroup
-	errCh := make(chan error)
-	for _, r := range r.routers {
-		r := r
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tim := time.NewTimer(r.ExecuteAfter)
-			defer tim.Stop()
-			select {
-			case <-ctx.Done():
-				if !r.IgnoreError {
-					errCh <- ctx.Err()
-				}
-			case <-tim.C:
-				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
-				defer cancel()
-				err := r.Router.Provide(ctx, cid, provide)
-				if err != nil &&
-					!r.IgnoreError {
-					errCh <- err
-				}
-			}
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(errCh)
-	}()
-
-	var errOut error
-	for err := range errCh {
-		errOut = multierror.Append(errOut, err)
-	}
-
-	return errOut
+	return execute(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) error {
+			return r.Provide(ctx, cid, provide)
+		},
+	)
 }
 
 // FindProvidersAsync will execute all Routers in parallel, iterating results from them in unspecified oredr.
@@ -126,186 +94,34 @@ func (r *ComposableParallel) FindProvidersAsync(ctx context.Context, cid cid.Cid
 
 // FindPeer will execute all Routers in parallel, getting the first AddrInfo found and cancelling all other Router calls.
 func (r *ComposableParallel) FindPeer(ctx context.Context, id peer.ID) (peer.AddrInfo, error) {
-	outCh := make(chan peer.AddrInfo)
-	errCh := make(chan error)
-
-	// global cancel context to stop early other router's execution.
-	ctx, gcancel := context.WithCancel(ctx)
-	var wg sync.WaitGroup
-	for _, r := range r.routers {
-		r := r
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tim := time.NewTimer(r.ExecuteAfter)
-			defer tim.Stop()
-			select {
-			case <-ctx.Done():
-				if !r.IgnoreError {
-					errCh <- ctx.Err()
-				}
-			case <-tim.C:
-				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
-				defer cancel()
-				addr, err := r.Router.FindPeer(ctx, id)
-				if err != nil &&
-					!errors.Is(err, routing.ErrNotFound) &&
-					!r.IgnoreError {
-					select {
-					case <-ctx.Done():
-					case errCh <- err:
-					}
-					return
-				}
-				if addr.ID == "" {
-					return
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case outCh <- addr:
-				}
-			}
-		}()
-	}
-
-	// goroutine closing everything when finishing execution
-	go func() {
-		wg.Wait()
-		close(outCh)
-		close(errCh)
-	}()
-
-	select {
-	case out, ok := <-outCh:
-		gcancel()
-		if !ok {
-			return peer.AddrInfo{}, routing.ErrNotFound
-		}
-		return out, nil
-	case err, ok := <-errCh:
-		gcancel()
-		if !ok {
-			return peer.AddrInfo{}, routing.ErrNotFound
-		}
-		return peer.AddrInfo{}, err
-	case <-ctx.Done():
-		gcancel()
-		return peer.AddrInfo{}, ctx.Err()
-	}
+	return getValueOrError(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) (peer.AddrInfo, error) {
+			return r.FindPeer(ctx, id)
+		},
+		func(ai peer.AddrInfo) bool {
+			return ai.ID == ""
+		})
 }
 
 // PutValue will execute all Routers in parallel. If a Router fails and IgnoreError flag is not set, the whole execution will fail.
 // Some Puts before the failure might be successful, even if we return an error.
 func (r *ComposableParallel) PutValue(ctx context.Context, key string, val []byte, opts ...routing.Option) error {
-	var wg sync.WaitGroup
-	errCh := make(chan error)
-	for _, r := range r.routers {
-		r := r
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tim := time.NewTimer(r.ExecuteAfter)
-			defer tim.Stop()
-			select {
-			case <-ctx.Done():
-				if !r.IgnoreError {
-					errCh <- ctx.Err()
-				}
-			case <-tim.C:
-				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
-				defer cancel()
-				err := r.Router.PutValue(ctx, key, val, opts...)
-				if err != nil &&
-					!r.IgnoreError {
-					errCh <- err
-				}
-			}
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(errCh)
-	}()
-
-	var errOut error
-	for err := range errCh {
-		errOut = multierror.Append(errOut, err)
-	}
-
-	return errOut
+	return execute(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) error {
+			return r.PutValue(ctx, key, val, opts...)
+		},
+	)
 }
 
 // GetValue will execute all Routers in parallel. The first value found will be returned, cancelling all other executions.
 func (r *ComposableParallel) GetValue(ctx context.Context, key string, opts ...routing.Option) ([]byte, error) {
-	outCh := make(chan []byte)
-	errCh := make(chan error)
-
-	// global cancel context to stop early other router's execution.
-	ctx, gcancel := context.WithCancel(ctx)
-	var wg sync.WaitGroup
-	for _, r := range r.routers {
-		r := r
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tim := time.NewTimer(r.ExecuteAfter)
-			defer tim.Stop()
-			select {
-			case <-ctx.Done():
-				if !r.IgnoreError {
-					errCh <- ctx.Err()
-				}
-			case <-tim.C:
-				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
-				defer cancel()
-				val, err := r.Router.GetValue(ctx, key, opts...)
-				if err != nil &&
-					!errors.Is(err, routing.ErrNotFound) &&
-					!r.IgnoreError {
-					select {
-					case <-ctx.Done():
-					case errCh <- err:
-					}
-					return
-				}
-				if len(val) == 0 {
-					return
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case outCh <- val:
-				}
-			}
-		}()
-	}
-
-	// goroutine closing everything when finishing execution
-	go func() {
-		wg.Wait()
-		close(outCh)
-		close(errCh)
-	}()
-
-	select {
-	case out, ok := <-outCh:
-		gcancel()
-		if !ok {
-			return nil, routing.ErrNotFound
-		}
-		return out, nil
-	case err, ok := <-errCh:
-		gcancel()
-		if !ok {
-			return nil, routing.ErrNotFound
-		}
-		return nil, err
-	case <-ctx.Done():
-		gcancel()
-		return nil, ctx.Err()
-	}
+	return getValueOrError(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) ([]byte, error) {
+			return r.GetValue(ctx, key, opts...)
+		},
+		func(ai []byte) bool {
+			return len(ai) == 0
+		})
 }
 
 func (r *ComposableParallel) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
@@ -373,14 +189,125 @@ func (r *ComposableParallel) SearchValue(ctx context.Context, key string, opts .
 }
 
 func (r *ComposableParallel) Bootstrap(ctx context.Context) error {
-	for _, router := range r.routers {
-		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
-		defer cancel()
-		if err := router.Router.Bootstrap(ctx); err != nil &&
-			!router.IgnoreError {
-			return err
-		}
+	return execute(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) error {
+			return r.Bootstrap(ctx)
+		})
+}
+
+func getValueOrError[T any](
+	ctx context.Context,
+	routers []*ParallelRouter,
+	f func(context.Context, routing.Routing) (T, error),
+	isEmpty func(T) bool,
+) (value T, err error) {
+	outCh := make(chan T)
+	errCh := make(chan error)
+
+	// global cancel context to stop early other router's execution.
+	ctx, gcancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	for _, r := range routers {
+		wg.Add(1)
+		go func(r *ParallelRouter) {
+			defer wg.Done()
+			tim := time.NewTimer(r.ExecuteAfter)
+			defer tim.Stop()
+			select {
+			case <-ctx.Done():
+				if !r.IgnoreError {
+					errCh <- ctx.Err()
+				}
+			case <-tim.C:
+				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
+				defer cancel()
+				value, err := f(ctx, r.Router)
+				if err != nil &&
+					!errors.Is(err, routing.ErrNotFound) &&
+					!r.IgnoreError {
+					select {
+					case <-ctx.Done():
+					case errCh <- err:
+					}
+					return
+				}
+				if isEmpty(value) {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case outCh <- value:
+				}
+			}
+		}(r)
 	}
 
-	return nil
+	// goroutine closing everything when finishing execution
+	go func() {
+		wg.Wait()
+		close(outCh)
+		close(errCh)
+	}()
+
+	select {
+	case out, ok := <-outCh:
+		gcancel()
+		if !ok {
+			return value, routing.ErrNotFound
+		}
+		return out, nil
+	case err, ok := <-errCh:
+		gcancel()
+		if !ok {
+			return value, routing.ErrNotFound
+		}
+		return value, err
+	case <-ctx.Done():
+		gcancel()
+		return value, ctx.Err()
+	}
+}
+
+func execute(
+	ctx context.Context,
+	routers []*ParallelRouter,
+	f func(context.Context, routing.Routing,
+	) error) error {
+	var wg sync.WaitGroup
+	errCh := make(chan error)
+	for _, r := range routers {
+		wg.Add(1)
+		go func(r *ParallelRouter) {
+			defer wg.Done()
+			tim := time.NewTimer(r.ExecuteAfter)
+			defer tim.Stop()
+			select {
+			case <-ctx.Done():
+				if !r.IgnoreError {
+					errCh <- ctx.Err()
+				}
+			case <-tim.C:
+				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
+				defer cancel()
+				err := f(ctx, r.Router)
+				if err != nil &&
+					!r.IgnoreError {
+					errCh <- err
+				}
+			}
+		}(r)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	var errOut error
+	for err := range errCh {
+		errOut = multierror.Append(errOut, err)
+	}
+
+	return errOut
 }
