@@ -7,13 +7,12 @@ import (
 	"reflect"
 	"sync"
 
-	ci "github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/routing"
-
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
 	record "github.com/libp2p/go-libp2p-record"
+	ci "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/routing"
 )
 
 // Parallel operates on the slice of routers in parallel.

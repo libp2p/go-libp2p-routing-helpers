@@ -6,10 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/routing"
-
 	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/routing"
 )
 
 type testCloser struct {
@@ -23,7 +22,7 @@ func (closer *testCloser) Close() error {
 
 type failValueStore struct{}
 
-var errFailValue = errors.New("fail valuestore error")
+var errFailValue = errors.New("fail value-store error")
 
 func (f failValueStore) PutValue(ctx context.Context, key string, value []byte, opts ...routing.Option) error {
 	return errFailValue
