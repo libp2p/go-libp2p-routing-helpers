@@ -9,6 +9,7 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
+	"github.com/multiformats/go-multihash"
 )
 
 var _ routing.Routing = &composableSequential{}
@@ -27,9 +28,40 @@ func NewComposableSequential(routers []*SequentialRouter) *composableSequential 
 // If some router fails and the IgnoreError flag is true, we continue to the next router.
 // Context timeout error will be also ignored if the flag is set.
 func (r *composableSequential) Provide(ctx context.Context, cid cid.Cid, provide bool) error {
-	return executeSequential(ctx, r.routers, func(ctx context.Context, r routing.Routing) error {
-		return r.Provide(ctx, cid, provide)
-	})
+	return executeSequential(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) error {
+			return r.Provide(ctx, cid, provide)
+		})
+}
+
+// ProvideMany will call all supported Routers sequentially.
+func (r *composableSequential) ProvideMany(ctx context.Context, keys []multihash.Multihash) error {
+	return executeSequential(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) error {
+			pm, ok := r.(ProvideManyRouter)
+			if !ok {
+				return nil
+			}
+			return pm.ProvideMany(ctx, keys)
+		},
+	)
+}
+
+// Ready will call all supported ProvideMany Routers sequentially.
+// If some of them are not ready, this method will return false.
+func (r *composableSequential) Ready() bool {
+	for _, ro := range r.routers {
+		pm, ok := ro.Router.(ProvideManyRouter)
+		if !ok {
+			continue
+		}
+
+		if !pm.Ready() {
+			return false
+		}
+	}
+
+	return true
 }
 
 // FindProvidersAsync calls FindProvidersAsync per each router sequentially.

@@ -11,9 +11,11 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
+	"github.com/multiformats/go-multihash"
 )
 
 var _ routing.Routing = &composableParallel{}
+var _ ProvideManyRouter = &composableParallel{}
 
 type composableParallel struct {
 	routers []*ParallelRouter
@@ -36,6 +38,36 @@ func (r *composableParallel) Provide(ctx context.Context, cid cid.Cid, provide b
 			return r.Provide(ctx, cid, provide)
 		},
 	)
+}
+
+// ProvideMany will call all supported Routers in parallel.
+func (r *composableParallel) ProvideMany(ctx context.Context, keys []multihash.Multihash) error {
+	return executeParallel(ctx, r.routers,
+		func(ctx context.Context, r routing.Routing) error {
+			pm, ok := r.(ProvideManyRouter)
+			if !ok {
+				return nil
+			}
+			return pm.ProvideMany(ctx, keys)
+		},
+	)
+}
+
+// Ready will call all supported ProvideMany Routers SEQUENTIALLY.
+// If some of them are not ready, this method will return false.
+func (r *composableParallel) Ready() bool {
+	for _, ro := range r.routers {
+		pm, ok := ro.Router.(ProvideManyRouter)
+		if !ok {
+			continue
+		}
+
+		if !pm.Ready() {
+			return false
+		}
+	}
+
+	return true
 }
 
 // FindProvidersAsync will execute all Routers in parallel, iterating results from them in unspecified order.
