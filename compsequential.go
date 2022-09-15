@@ -3,7 +3,6 @@ package routinghelpers
 import (
 	"context"
 	"errors"
-	"sync"
 	"sync/atomic"
 
 	"github.com/ipfs/go-cid"
@@ -204,10 +203,7 @@ func getChannelOrErrorSequential[T any](
 		chans = append(chans, rch)
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		for i := 0; i < len(chans); i++ {
 			if chans[i] == nil {
 				cancels[i]()
@@ -229,10 +225,7 @@ func getChannelOrErrorSequential[T any](
 
 			cancels[i]()
 		}
-	}()
 
-	go func() {
-		wg.Wait()
 		close(chanOut)
 	}()
 

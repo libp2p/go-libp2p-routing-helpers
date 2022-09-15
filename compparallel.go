@@ -156,9 +156,6 @@ func getValueOrErrorParallel[T any](
 			defer tim.Stop()
 			select {
 			case <-ctx.Done():
-				if !r.IgnoreError {
-					errCh <- ctx.Err()
-				}
 			case <-tim.C:
 				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
 				defer cancel()
@@ -314,13 +311,11 @@ func getChannelOrErrorParallel[T any](
 
 	select {
 	case err, ok := <-errCh:
-		cancelAll()
 		if !ok {
 			return nil, routing.ErrNotFound
 		}
 		return nil, err
 	case <-ctx.Done():
-		cancelAll()
 		return nil, ctx.Err()
 	default:
 		return outCh, nil
