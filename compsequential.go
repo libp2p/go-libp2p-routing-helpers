@@ -219,7 +219,12 @@ func getChannelOrErrorSequential[T any](
 					if !ok {
 						break f
 					}
-					chanOut <- v
+					select {
+					case <-ctx.Done():
+						break f
+					case chanOut <- v:
+					}
+
 				}
 			}
 
