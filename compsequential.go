@@ -141,6 +141,10 @@ func getValueOrErrorSequential[T any](
 	f func(context.Context, routing.Routing) (T, bool, error),
 ) (value T, err error) {
 	for _, router := range routers {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return value, ctxErr
+		}
+
 		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
 		defer cancel()
 		value, empty, err := f(ctx, router.Router)
@@ -166,6 +170,9 @@ func executeSequential(
 	f func(context.Context, routing.Routing,
 	) error) error {
 	for _, router := range routers {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
 		if err := f(ctx, router.Router); err != nil &&
 			!errors.Is(err, routing.ErrNotFound) &&
@@ -189,6 +196,11 @@ func getChannelOrErrorSequential[T any](
 
 	go func() {
 		for _, router := range routers {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				close(chanOut)
+				return
+			}
+
 			ctx, cancel := context.WithTimeout(ctx, router.Timeout)
 			rch, err := f(ctx, router.Router)
 			if err != nil &&
