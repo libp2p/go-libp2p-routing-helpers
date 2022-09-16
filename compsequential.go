@@ -69,7 +69,7 @@ func (r *composableSequential) Ready() bool {
 // If count is set, the channel will return up to count results, stopping routers iteration.
 func (r *composableSequential) FindProvidersAsync(ctx context.Context, cid cid.Cid, count int) <-chan peer.AddrInfo {
 	var totalCount int64
-	ch, _ := getChannelOrErrorSequential(ctx, r.routers,
+	return getChannelOrErrorSequential(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) (<-chan peer.AddrInfo, error) {
 			return r.FindProvidersAsync(ctx, cid, count), nil
 		},
@@ -77,8 +77,6 @@ func (r *composableSequential) FindProvidersAsync(ctx context.Context, cid cid.C
 			return atomic.AddInt64(&totalCount, 1) > int64(count) && count != 0
 		},
 	)
-
-	return ch
 }
 
 // FindPeer calls FindPeer per each router sequentially.
@@ -116,12 +114,14 @@ func (r *composableSequential) GetValue(ctx context.Context, key string, opts ..
 // If some router fails and the IgnoreError flag is true, we continue to the next router.
 // Context timeout error will be also ignored if the flag is set.
 func (r *composableSequential) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
-	return getChannelOrErrorSequential(ctx, r.routers,
+	ch := getChannelOrErrorSequential(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) (<-chan []byte, error) {
 			return r.SearchValue(ctx, key, opts...)
 		},
 		func() bool { return false },
 	)
+
+	return ch, nil
 
 }
 
@@ -184,30 +184,18 @@ func getChannelOrErrorSequential[T any](
 	routers []*SequentialRouter,
 	f func(context.Context, routing.Routing) (<-chan T, error),
 	shouldStop func() bool,
-) (chan T, error) {
+) chan T {
 	chanOut := make(chan T)
-	var chans []<-chan T
-	var cancels []context.CancelFunc
-
-	for _, router := range routers {
-		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
-		rch, err := f(ctx, router.Router)
-		if err != nil &&
-			!errors.Is(err, routing.ErrNotFound) &&
-			!router.IgnoreError {
-			cancel()
-			return nil, err
-		}
-
-		cancels = append(cancels, cancel)
-		chans = append(chans, rch)
-	}
 
 	go func() {
-		for i := 0; i < len(chans); i++ {
-			if chans[i] == nil {
-				cancels[i]()
-				continue
+		for _, router := range routers {
+			ctx, cancel := context.WithTimeout(ctx, router.Timeout)
+			rch, err := f(ctx, router.Router)
+			if err != nil &&
+				!errors.Is(err, routing.ErrNotFound) &&
+				!router.IgnoreError {
+				cancel()
+				break
 			}
 
 		f:
@@ -215,7 +203,7 @@ func getChannelOrErrorSequential[T any](
 				select {
 				case <-ctx.Done():
 					break f
-				case v, ok := <-chans[i]:
+				case v, ok := <-rch:
 					if !ok {
 						break f
 					}
@@ -223,11 +211,11 @@ func getChannelOrErrorSequential[T any](
 				}
 			}
 
-			cancels[i]()
+			cancel()
 		}
 
 		close(chanOut)
 	}()
 
-	return chanOut, nil
+	return chanOut
 }
