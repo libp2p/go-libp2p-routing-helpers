@@ -12,6 +12,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNoResults(t *testing.T) {
+	require := require.New(t)
+	rs := []*ParallelRouter{
+		{
+			Timeout:     time.Second,
+			IgnoreError: true,
+			Router:      Null{},
+		},
+		{
+			Timeout:     time.Second,
+			IgnoreError: true,
+			Router: &Compose{
+				ValueStore:     newDummyValueStore(t, []string{"a"}, []string{"av"}),
+				PeerRouting:    Null{},
+				ContentRouting: Null{},
+			},
+		},
+	}
+
+	cp := NewComposableParallel(rs)
+
+	v, err := cp.GetValue(context.Background(), "a")
+	require.NoError(err)
+	require.Equal("av", string(v))
+
+}
+
 func TestComposableParallelFixtures(t *testing.T) {
 	fixtures := []struct {
 		Name             string
