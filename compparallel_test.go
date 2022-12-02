@@ -36,31 +36,45 @@ func TestNoResults(t *testing.T) {
 	v, err := cp.GetValue(context.Background(), "a")
 	require.NoError(err)
 	require.Equal("av", string(v))
+}
 
+type getValueFixture struct {
+	err            error
+	key            string
+	value          string
+	searchValCount int
+}
+
+type putValueFixture struct {
+	err   error
+	key   string
+	value string
+}
+type provideFixture struct {
+	err error
+}
+type findPeerFixture struct {
+	peerID string
+	err    error
+}
+type searchValueFixture struct {
+	ctx  context.Context
+	err  error
+	key  string
+	vals []string
 }
 
 func TestComposableParallelFixtures(t *testing.T) {
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
 	fixtures := []struct {
-		Name             string
-		routers          []*ParallelRouter
-		GetValueFixtures []struct {
-			err            error
-			key            string
-			value          string
-			searchValCount int
-		}
-		PutValueFixtures []struct {
-			err   error
-			key   string
-			value string
-		}
-		ProvideFixtures []struct {
-			err error
-		}
-		FindPeerFixtures []struct {
-			peerID string
-			err    error
-		}
+		Name        string
+		routers     []*ParallelRouter
+		GetValue    []getValueFixture
+		PutValue    []putValueFixture
+		Provide     []provideFixture
+		FindPeer    []findPeerFixture
+		SearchValue []searchValueFixture
 	}{
 		{
 			Name: "simple two routers, one with delay",
@@ -85,56 +99,19 @@ func TestComposableParallelFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
-				{
-					key:            "d",
-					value:          "dv",
-					searchValCount: 1,
-				},
-				{
-					key:            "a",
-					value:          "av",
-					searchValCount: 2,
-				},
+			GetValue: []getValueFixture{
+				{key: "d", value: "dv", searchValCount: 1},
+				{key: "a", value: "av", searchValCount: 2},
 			},
-			PutValueFixtures: []struct {
-				err   error
-				key   string
-				value string
-			}{
-				{
-					err:   errors.New("2 errors occurred:\n\t* a\n\t* a\n\n"),
-					key:   "/error/a",
-					value: "a",
-				},
-				{
-					key:   "a",
-					value: "a",
-				},
+			PutValue: []putValueFixture{
+				{err: errors.New("2 errors occurred:\n\t* a\n\t* a\n\n"), key: "/error/a", value: "a"},
+				{key: "a", value: "a"},
 			},
-			ProvideFixtures: []struct {
-				err error
-			}{
-				{
-					err: errors.New("2 errors occurred:\n\t* routing: operation or key not supported\n\t* routing: operation or key not supported\n\n"),
-				},
-			},
-			FindPeerFixtures: []struct {
-				peerID string
-				err    error
-			}{
-				{
-					peerID: "pid1",
-				},
-				{
-					peerID: "pid3",
-				},
-			},
+			Provide: []provideFixture{{
+				err: errors.New("2 errors occurred:\n\t* routing: operation or key not supported\n\t* routing: operation or key not supported\n\n"),
+			}},
+			FindPeer:    []findPeerFixture{{peerID: "pid1"}, {peerID: "pid3"}},
+			SearchValue: []searchValueFixture{{key: "a", vals: []string{"a", "a"}}},
 		},
 		{
 			Name: "two routers with ignore errors",
@@ -159,48 +136,16 @@ func TestComposableParallelFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
-				{
-					key:            "d",
-					value:          "dv",
-					searchValCount: 1,
-				},
-				{
-					err: routing.ErrNotFound, // even ignoring errors, if the value is not found we return not found
-					key: "a",
-				},
+			GetValue: []getValueFixture{
+				{key: "d", value: "dv", searchValCount: 1},
+				{err: routing.ErrNotFound, key: "a"}, // even ignoring errors, if the value is not found we return not found
 			},
-			PutValueFixtures: []struct {
-				err   error
-				key   string
-				value string
-			}{
-				{
-					key:   "/error/x",
-					value: "xv",
-				},
-				{
-					key:   "/error/y",
-					value: "yv",
-				},
+			PutValue: []putValueFixture{{key: "/error/x", value: "xv"}, {key: "/error/y", value: "yv"}},
+			FindPeer: []findPeerFixture{
+				{peerID: "pid1"},
+				{err: routing.ErrNotFound, peerID: "pid4"}, // even ignoring errors, if the value is not found we return not found
 			},
-			FindPeerFixtures: []struct {
-				peerID string
-				err    error
-			}{
-				{
-					peerID: "pid1",
-				},
-				{
-					err:    routing.ErrNotFound, // even ignoring errors, if the value is not found we return not found
-					peerID: "pid4",
-				},
-			},
+			SearchValue: []searchValueFixture{{key: "a", vals: nil}},
 		},
 		{
 			Name: "two routers with ignore errors no delay",
@@ -224,56 +169,19 @@ func TestComposableParallelFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
-				{
-					key:            "d",
-					value:          "dv",
-					searchValCount: 1,
-				},
-				{
-					key:            "a",
-					value:          "av",
-					searchValCount: 1,
-				},
-				{
-					err: routing.ErrNotFound,
-					key: "/error/z",
-				},
-				{
-					err: routing.ErrNotFound,
-					key: "/error/y",
-				},
+			GetValue: []getValueFixture{
+				{key: "d", value: "dv", searchValCount: 1},
+				{key: "a", value: "av", searchValCount: 1},
+				{err: routing.ErrNotFound, key: "/error/z"},
+				{err: routing.ErrNotFound, key: "/error/y"},
 			},
-			PutValueFixtures: []struct {
-				err   error
-				key   string
-				value string
-			}{
-				{
-					key:   "/error/x",
-					value: "xv",
-				},
-				{
-					key:   "/error/y",
-					value: "yv",
-				},
+			PutValue: []putValueFixture{
+				{key: "/error/x", value: "xv"},
+				{key: "/error/y", value: "yv"},
 			},
-			FindPeerFixtures: []struct {
-				peerID string
-				err    error
-			}{
-				{
-					peerID: "pid1",
-				},
-				{
-					peerID: "pid4",
-					err:    routing.ErrNotFound,
-				},
+			FindPeer: []findPeerFixture{
+				{peerID: "pid1"},
+				{peerID: "pid4", err: routing.ErrNotFound},
 			},
 		},
 		{
@@ -299,22 +207,9 @@ func TestComposableParallelFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
-				{
-					err:   errFailValue,
-					key:   "d",
-					value: "dv",
-				},
-				{
-					err:   errFailValue,
-					key:   "a",
-					value: "av",
-				},
+			GetValue: []getValueFixture{
+				{err: errFailValue, key: "d", value: "dv"},
+				{err: errFailValue, key: "a", value: "av"},
 			},
 		},
 		{
@@ -339,23 +234,23 @@ func TestComposableParallelFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
-				{
-					key:            "d",
-					value:          "dv",
-					searchValCount: 1,
-				},
-				{
-					err:   routing.ErrNotFound,
-					key:   "a",
-					value: "av",
-				},
+			GetValue: []getValueFixture{
+				{key: "d", value: "dv", searchValCount: 1},
+				{err: routing.ErrNotFound, key: "a", value: "av"},
 			},
+		},
+		{
+			Name: "SearchValue returns an error",
+			routers: []*ParallelRouter{{
+				Timeout:     time.Second,
+				IgnoreError: false,
+				Router: &Compose{
+					ValueStore:     newDummyValueStore(t, []string{"a", "a"}, []string{"b", "c"}),
+					PeerRouting:    Null{},
+					ContentRouting: Null{},
+				},
+			}},
+			SearchValue: []searchValueFixture{{key: "a", ctx: canceledCtx, err: context.Canceled}},
 		},
 	}
 
@@ -365,24 +260,21 @@ func TestComposableParallelFixtures(t *testing.T) {
 			t.Parallel()
 			require := require.New(t)
 			cpr := NewComposableParallel(f.routers)
-			for _, gvf := range f.GetValueFixtures {
+			for _, gvf := range f.GetValue {
 				val, err := cpr.GetValue(context.Background(), gvf.key)
 				if gvf.err != nil {
 					require.ErrorContains(err, gvf.err.Error())
 					continue
-				} else {
-					require.NoError(err)
 				}
-
+				require.NoError(err)
 				require.Equal(gvf.value, string(val))
 
 				vals, err := cpr.SearchValue(context.Background(), gvf.key)
 				if gvf.err != nil {
 					require.ErrorContains(err, gvf.err.Error())
 					continue
-				} else {
-					require.NoError(err)
 				}
+				require.NoError(err)
 
 				count := 0
 				for range vals {
@@ -392,36 +284,61 @@ func TestComposableParallelFixtures(t *testing.T) {
 				require.Equal(gvf.searchValCount, count)
 			}
 
-			for _, pvf := range f.PutValueFixtures {
+			for _, pvf := range f.PutValue {
 				err := cpr.PutValue(context.Background(), pvf.key, []byte(pvf.value))
 				if pvf.err != nil {
 					require.ErrorContains(err, pvf.err.Error())
 					continue
-				} else {
-					require.NoError(err)
 				}
+				require.NoError(err)
 			}
 
-			for _, pf := range f.ProvideFixtures {
+			for _, pf := range f.Provide {
 				err := cpr.Provide(context.Background(), cid.Cid{}, true)
 				if pf.err != nil {
 					require.ErrorContains(err, pf.err.Error())
 					continue
-				} else {
-					require.NoError(err)
 				}
+				require.NoError(err)
 			}
 
-			for _, fpf := range f.FindPeerFixtures {
+			for _, fpf := range f.FindPeer {
 				addr, err := cpr.FindPeer(context.Background(), peer.ID(fpf.peerID))
 				if fpf.err != nil {
 					require.ErrorContains(err, fpf.err.Error())
 					continue
-				} else {
-					require.NoError(err)
 				}
-
+				require.NoError(err)
 				require.Equal(fpf.peerID, string(addr.ID))
+			}
+			for _, svf := range f.SearchValue {
+				ctx := context.Background()
+				if svf.ctx != nil {
+					ctx = svf.ctx
+				}
+				res, err := cpr.SearchValue(ctx, svf.key)
+				if svf.err != nil {
+					require.ErrorContains(err, svf.err.Error())
+
+					// check that the result channel is responsive
+					// ex if we accidentally return nil then result chan will hang when reading
+					// it should either be closed or produce results
+					timer := time.NewTimer(1 * time.Second)
+					select {
+					case <-res:
+					case <-timer.C:
+						t.Fatalf("result channel was unresponsive after an error occurred")
+					}
+
+					continue
+				}
+				require.NoError(err)
+
+				var vals []string
+				for v := range res {
+					vals = append(vals, string(v))
+				}
+				require.Equal(svf.vals, vals)
 			}
 		})
 	}
