@@ -312,11 +312,11 @@ func getChannelOrErrorParallel[T any](
 	select {
 	case err, ok := <-errCh:
 		if !ok {
-			return nil, routing.ErrNotFound
+			return outCh, routing.ErrNotFound
 		}
-		return nil, err
+		return outCh, err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return outCh, ctx.Err()
 	default:
 		return outCh, nil
 	}
