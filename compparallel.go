@@ -19,6 +19,7 @@ var log = logging.Logger("routing/composable")
 
 var _ routing.Routing = &composableParallel{}
 var _ ProvideManyRouter = &composableParallel{}
+var _ Composable = &composableParallel{}
 
 type composableParallel struct {
 	routers []*ParallelRouter
@@ -32,6 +33,15 @@ func NewComposableParallel(routers []*ParallelRouter) *composableParallel {
 	return &composableParallel{
 		routers: routers,
 	}
+}
+
+func (r *composableParallel) Routers() []routing.Routing {
+	var routers []routing.Routing
+	for _, pr := range r.routers {
+		routers = append(routers, pr.Router)
+	}
+
+	return routers
 }
 
 // Provide will call all Routers in parallel.
