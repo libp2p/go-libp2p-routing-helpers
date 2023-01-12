@@ -36,6 +36,8 @@ func TestNoResults(t *testing.T) {
 	v, err := cp.GetValue(context.Background(), "a")
 	require.NoError(err)
 	require.Equal("av", string(v))
+
+	require.Equal(2, len(cp.Routers()))
 }
 
 type getValueFixture struct {
