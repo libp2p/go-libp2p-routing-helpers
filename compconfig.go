@@ -25,3 +25,7 @@ type ProvideManyRouter interface {
 	ProvideMany(ctx context.Context, keys []multihash.Multihash) error
 	Ready() bool
 }
+
+type Composable interface {
+	Routers() []routing.Routing
+}

@@ -12,6 +12,8 @@ import (
 )
 
 var _ routing.Routing = &composableSequential{}
+var _ ProvideManyRouter = &composableSequential{}
+var _ Composable = &composableSequential{}
 
 type composableSequential struct {
 	routers []*SequentialRouter
@@ -21,6 +23,15 @@ func NewComposableSequential(routers []*SequentialRouter) *composableSequential 
 	return &composableSequential{
 		routers: routers,
 	}
+}
+
+func (r *composableSequential) Routers() []routing.Routing {
+	var routers []routing.Routing
+	for _, sr := range r.routers {
+		routers = append(routers, sr.Router)
+	}
+
+	return routers
 }
 
 // Provide calls Provide method per each router sequentially.
