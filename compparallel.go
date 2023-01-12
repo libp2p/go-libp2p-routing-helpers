@@ -19,7 +19,7 @@ var log = logging.Logger("routing/composable")
 
 var _ routing.Routing = &composableParallel{}
 var _ ProvideManyRouter = &composableParallel{}
-var _ Composable = &composableParallel{}
+var _ ComposableRouter = &composableParallel{}
 
 type composableParallel struct {
 	routers []*ParallelRouter
