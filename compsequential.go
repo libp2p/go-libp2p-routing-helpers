@@ -13,7 +13,7 @@ import (
 
 var _ routing.Routing = &composableSequential{}
 var _ ProvideManyRouter = &composableSequential{}
-var _ Composable = &composableSequential{}
+var _ ComposableRouter = &composableSequential{}
 
 type composableSequential struct {
 	routers []*SequentialRouter

@@ -26,6 +26,6 @@ type ProvideManyRouter interface {
 	Ready() bool
 }
 
-type Composable interface {
+type ComposableRouter interface {
 	Routers() []routing.Routing
 }
