@@ -12,6 +12,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNoResultsSequential(t *testing.T) {
+	require := require.New(t)
+	rs := []*SequentialRouter{
+		{
+			Timeout:     time.Second,
+			IgnoreError: true,
+			Router:      Null{},
+		},
+		{
+			Timeout:     time.Second,
+			IgnoreError: true,
+			Router: &Compose{
+				ValueStore:     newDummyValueStore(t, []string{"a"}, []string{"av"}),
+				PeerRouting:    Null{},
+				ContentRouting: Null{},
+			},
+		},
+	}
+
+	cs := NewComposableSequential(rs)
+
+	v, err := cs.GetValue(context.Background(), "a")
+	require.NoError(err)
+	require.Equal("av", string(v))
+
+	require.Equal(2, len(cs.Routers()))
+}
+
 func TestComposableSequentialFixtures(t *testing.T) {
 	fixtures := []struct {
 		Name             string
