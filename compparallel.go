@@ -95,7 +95,10 @@ func (r *composableParallel) FindProvidersAsync(ctx context.Context, cid cid.Cid
 			return r.FindProvidersAsync(ctx, cid, count), nil
 		},
 		func() bool {
-			return atomic.AddInt64(&totalCount, 1) > int64(count) && count != 0
+			if count == 0 {
+				return false
+			}
+			return atomic.AddInt64(&totalCount, 1) >= int64(count)
 		},
 	)
 
@@ -369,15 +372,6 @@ func getChannelOrErrorParallel[T any](
 							return
 						}
 
-						if shouldStop() {
-							log.Debug("getChannelOrErrorParallel: stopping channel iteration for router ", r.Router,
-								" with timeout ", r.Timeout,
-								" and ignore errors ", r.IgnoreError,
-								" closed channel: ", ok,
-							)
-							return
-						}
-
 						select {
 						case <-ctx.Done():
 							log.Debug("getChannelOrErrorParallel: stopping execution on router on context done inside select for router ", r.Router,
@@ -386,6 +380,16 @@ func getChannelOrErrorParallel[T any](
 							)
 							return
 						case outCh <- val:
+						}
+
+						if shouldStop() {
+							log.Debug("getChannelOrErrorParallel: stopping channel iteration for router ", r.Router,
+								" with timeout ", r.Timeout,
+								" and ignore errors ", r.IgnoreError,
+								" closed channel: ", ok,
+							)
+							cancelAll()
+							return
 						}
 					}
 				}
