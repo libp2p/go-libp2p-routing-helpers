@@ -41,27 +41,31 @@ func TestNoResultsSequential(t *testing.T) {
 }
 
 func TestComposableSequentialFixtures(t *testing.T) {
+	type getValueFixture struct {
+		err            error
+		key            string
+		value          string
+		searchValCount int
+	}
+	type putValueFixture struct {
+		err   error
+		key   string
+		value string
+	}
+	type provideFixture struct {
+		err error
+	}
+	type findPeerFixture struct {
+		peerID string
+		err    error
+	}
 	fixtures := []struct {
 		Name             string
 		routers          []*SequentialRouter
-		GetValueFixtures []struct {
-			err            error
-			key            string
-			value          string
-			searchValCount int
-		}
-		PutValueFixtures []struct {
-			err   error
-			key   string
-			value string
-		}
-		ProvideFixtures []struct {
-			err error
-		}
-		FindPeerFixtures []struct {
-			peerID string
-			err    error
-		}
+		GetValueFixtures []getValueFixture
+		PutValueFixtures []putValueFixture
+		ProvideFixtures  []provideFixture
+		FindPeerFixtures []findPeerFixture
 	}{
 		{
 			Name: "simple two routers",
@@ -85,12 +89,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
+			GetValueFixtures: []getValueFixture{
 				{
 					key:            "d",
 					value:          "dv",
@@ -102,11 +101,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					searchValCount: 2,
 				},
 			},
-			PutValueFixtures: []struct {
-				err   error
-				key   string
-				value string
-			}{
+			PutValueFixtures: []putValueFixture{
 				{
 					err:   errors.New("a"),
 					key:   "/error/a",
@@ -117,17 +112,12 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					value: "a",
 				},
 			},
-			ProvideFixtures: []struct {
-				err error
-			}{
+			ProvideFixtures: []provideFixture{
 				{
 					err: routing.ErrNotSupported,
 				},
 			},
-			FindPeerFixtures: []struct {
-				peerID string
-				err    error
-			}{
+			FindPeerFixtures: []findPeerFixture{
 				{
 					peerID: "pid1",
 				},
@@ -158,12 +148,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
+			GetValueFixtures: []getValueFixture{
 				{
 					key:            "d",
 					value:          "dv",
@@ -174,11 +159,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					key: "a",
 				},
 			},
-			PutValueFixtures: []struct {
-				err   error
-				key   string
-				value string
-			}{
+			PutValueFixtures: []putValueFixture{
 				{
 					key:   "/error/x",
 					value: "xv",
@@ -188,10 +169,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					value: "yv",
 				},
 			},
-			FindPeerFixtures: []struct {
-				peerID string
-				err    error
-			}{
+			FindPeerFixtures: []findPeerFixture{
 				{
 					peerID: "pid1",
 				},
@@ -223,12 +201,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
+			GetValueFixtures: []getValueFixture{
 				{
 					key:            "d",
 					value:          "dv",
@@ -248,11 +221,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					key: "/error/y",
 				},
 			},
-			PutValueFixtures: []struct {
-				err   error
-				key   string
-				value string
-			}{
+			PutValueFixtures: []putValueFixture{
 				{
 					key:   "/error/x",
 					value: "xv",
@@ -262,10 +231,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					value: "yv",
 				},
 			},
-			FindPeerFixtures: []struct {
-				peerID string
-				err    error
-			}{
+			FindPeerFixtures: []findPeerFixture{
 				{
 					peerID: "pid1",
 				},
@@ -297,12 +263,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
+			GetValueFixtures: []getValueFixture{
 				{
 					err:   errFailValue,
 					key:   "d",
@@ -337,12 +298,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					},
 				},
 			},
-			GetValueFixtures: []struct {
-				err            error
-				key            string
-				value          string
-				searchValCount int
-			}{
+			GetValueFixtures: []getValueFixture{
 				{
 					key:            "d",
 					value:          "dv",
@@ -354,6 +310,26 @@ func TestComposableSequentialFixtures(t *testing.T) {
 					value: "av",
 				},
 			},
+		},
+		{
+			Name: "timeout=0 should disable the timeout, two routers with one disabled timeout should timeout on the other router",
+			routers: []*SequentialRouter{
+				{
+					Timeout:     0,
+					IgnoreError: false,
+					Router: &Compose{
+						ValueStore: newDummyValueStore(t, nil, nil),
+					},
+				},
+				{
+					Timeout:     time.Minute,
+					IgnoreError: false,
+					Router: &Compose{
+						ValueStore: newDummyValueStore(t, []string{"a"}, []string{"av"}),
+					},
+				},
+			},
+			GetValueFixtures: []getValueFixture{{key: "/wait/100ms/a", value: "av", searchValCount: 1}},
 		},
 	}
 

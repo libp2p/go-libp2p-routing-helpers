@@ -152,6 +152,13 @@ func (r *composableParallel) Bootstrap(ctx context.Context) error {
 		})
 }
 
+func withCancelAndOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout != 0 {
+		return context.WithTimeout(ctx, timeout)
+	}
+	return context.WithCancel(ctx)
+}
+
 func getValueOrErrorParallel[T any](
 	ctx context.Context,
 	routers []*ParallelRouter,
@@ -177,7 +184,7 @@ func getValueOrErrorParallel[T any](
 			select {
 			case <-ctx.Done():
 			case <-tim.C:
-				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
+				ctx, cancel := withCancelAndOptionalTimeout(ctx, r.Timeout)
 				defer cancel()
 				value, empty, err := f(ctx, r.Router)
 				if err != nil &&
@@ -269,8 +276,9 @@ func executeParallel(
 					errCh <- ctx.Err()
 				}
 			case <-tim.C:
-				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
+				ctx, cancel := withCancelAndOptionalTimeout(ctx, r.Timeout)
 				defer cancel()
+
 				log.Debug("executeParallel: calling router function for router ", r.Router,
 					" with timeout ", r.Timeout,
 					" and ignore errors ", r.IgnoreError,
@@ -335,8 +343,9 @@ func getChannelOrErrorParallel[T any](
 				)
 				return
 			case <-tim.C:
-				ctx, cancel := context.WithTimeout(ctx, r.Timeout)
+				ctx, cancel := withCancelAndOptionalTimeout(ctx, r.Timeout)
 				defer cancel()
+
 				log.Debug("getChannelOrErrorParallel: calling router function for router ", r.Router,
 					" with timeout ", r.Timeout,
 					" and ignore errors ", r.IgnoreError,

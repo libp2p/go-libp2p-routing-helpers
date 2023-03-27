@@ -254,6 +254,28 @@ func TestComposableParallelFixtures(t *testing.T) {
 			}},
 			SearchValue: []searchValueFixture{{key: "a", ctx: canceledCtx, err: context.Canceled}},
 		},
+		{
+			Name: "timeout=0 should disable the timeout, two routers with one disabled timeout should timeout on the other router",
+			routers: []*ParallelRouter{
+				{
+					Timeout:     0,
+					IgnoreError: false,
+					Router: &Compose{
+						ValueStore: newDummyValueStore(t, nil, nil),
+					},
+				},
+				{
+					Timeout:     time.Second,
+					IgnoreError: false,
+					Router: &Compose{
+						ValueStore: newDummyValueStore(t, []string{"a"}, []string{"av"}),
+					},
+				},
+			},
+			GetValue: []getValueFixture{
+				{key: "/wait/100ms/a", value: "av", searchValCount: 1},
+			},
+		},
 	}
 
 	for _, f := range fixtures {
