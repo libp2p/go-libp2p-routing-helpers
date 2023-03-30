@@ -156,8 +156,9 @@ func getValueOrErrorSequential[T any](
 			return value, ctxErr
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
+		ctx, cancel := withCancelAndOptionalTimeout(ctx, router.Timeout)
 		defer cancel()
+
 		value, empty, err := f(ctx, router.Router)
 		if err != nil &&
 			!errors.Is(err, routing.ErrNotFound) &&
@@ -184,14 +185,15 @@ func executeSequential(
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		ctx, cancel := context.WithTimeout(ctx, router.Timeout)
+
+		ctx, cancel := withCancelAndOptionalTimeout(ctx, router.Timeout)
+		defer cancel()
+
 		if err := f(ctx, router.Router); err != nil &&
 			!errors.Is(err, routing.ErrNotFound) &&
 			!router.IgnoreError {
-			cancel()
 			return err
 		}
-		cancel()
 	}
 
 	return nil
@@ -211,13 +213,12 @@ func getChannelOrErrorSequential[T any](
 				close(chanOut)
 				return
 			}
-
-			ctx, cancel := context.WithTimeout(ctx, router.Timeout)
+			ctx, cancel := withCancelAndOptionalTimeout(ctx, router.Timeout)
+			defer cancel()
 			rch, err := f(ctx, router.Router)
 			if err != nil &&
 				!errors.Is(err, routing.ErrNotFound) &&
 				!router.IgnoreError {
-				cancel()
 				break
 			}
 
@@ -238,8 +239,6 @@ func getChannelOrErrorSequential[T any](
 
 				}
 			}
-
-			cancel()
 		}
 
 		close(chanOut)

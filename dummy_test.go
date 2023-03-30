@@ -3,8 +3,10 @@ package routinghelpers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -59,6 +61,26 @@ func (d *dummyValueStore) GetValue(ctx context.Context, key string, opts ...rout
 	if strings.HasPrefix(key, "/stall/") {
 		<-ctx.Done()
 		return nil, ctx.Err()
+	}
+	// format: /wait/10s/key
+	// this will wait for the given duration and then perform the lookup normally on key,
+	// short circuiting if the context closes
+	if strings.HasPrefix(key, "/wait/") {
+		durationAndKey := strings.TrimPrefix(key, "/wait/")
+		split := strings.Split(durationAndKey, "/")
+		durationStr, key := split[0], split[1]
+		duration, err := time.ParseDuration(durationStr)
+		if err != nil {
+			return nil, fmt.Errorf("parsing wait duration: %w", err)
+		}
+		timer := time.NewTimer(duration)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			return d.GetValue(ctx, key, opts...)
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 	if v, ok := (*sync.Map)(d).Load(key); ok {
 		return v.([]byte), nil
