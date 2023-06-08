@@ -23,6 +23,9 @@ type SequentialRouter struct {
 
 type ProvideManyRouter interface {
 	ProvideMany(ctx context.Context, keys []multihash.Multihash) error
+}
+
+type ReadyAbleRouter interface {
 	Ready() bool
 }
 

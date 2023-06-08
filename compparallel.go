@@ -57,11 +57,16 @@ func (r *composableParallel) Provide(ctx context.Context, cid cid.Cid, provide b
 func (r *composableParallel) ProvideMany(ctx context.Context, keys []multihash.Multihash) error {
 	return executeParallel(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) error {
-			pm, ok := r.(ProvideManyRouter)
-			if !ok {
-				return nil
+			if pm, ok := r.(ProvideManyRouter); ok {
+				return pm.ProvideMany(ctx, keys)
 			}
-			return pm.ProvideMany(ctx, keys)
+
+			for _, k := range keys {
+				if err := r.Provide(ctx, cid.NewCidV1(cid.Raw, k), true); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 	)
 }
@@ -70,7 +75,7 @@ func (r *composableParallel) ProvideMany(ctx context.Context, keys []multihash.M
 // If some of them are not ready, this method will return false.
 func (r *composableParallel) Ready() bool {
 	for _, ro := range r.routers {
-		pm, ok := ro.Router.(ProvideManyRouter)
+		pm, ok := ro.Router.(ReadyAbleRouter)
 		if !ok {
 			continue
 		}
