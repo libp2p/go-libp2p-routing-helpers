@@ -3,10 +3,10 @@ package routinghelpers
 import (
 	"context"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/Jorropo/jsync"
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log"
@@ -175,11 +175,14 @@ func getValueOrErrorParallel[T any](
 	// global cancel context to stop early other router's execution.
 	ctx, cancelAll := context.WithCancel(ctx)
 	defer cancelAll()
-	var wg sync.WaitGroup
+	fwg := jsync.NewFWaitGroup(func() {
+		close(outCh)
+		close(errCh)
+		log.Debug("getValueOrErrorParallel: finished executing all routers ", len(routers))
+	}, uint64(len(routers)))
 	for _, r := range routers {
-		wg.Add(1)
 		go func(r *ParallelRouter) {
-			defer wg.Done()
+			defer fwg.Done()
 			log.Debug("getValueOrErrorParallel: starting execution for router ", r.Router,
 				" with timeout ", r.Timeout,
 				" and ignore errors ", r.IgnoreError,
@@ -222,14 +225,6 @@ func getValueOrErrorParallel[T any](
 		}(r)
 	}
 
-	// goroutine closing everything when finishing execution
-	go func() {
-		wg.Wait()
-		close(outCh)
-		close(errCh)
-		log.Debug("getValueOrErrorParallel: finished executing all routers ", len(routers))
-	}()
-
 	select {
 	case out, ok := <-outCh:
 		if !ok {
@@ -259,12 +254,14 @@ func executeParallel(
 	routers []*ParallelRouter,
 	f func(context.Context, routing.Routing,
 	) error) error {
-	var wg sync.WaitGroup
 	errCh := make(chan error)
+	fwg := jsync.NewFWaitGroup(func() {
+		close(errCh)
+		log.Debug("executeParallel: finished executing all routers ", len(routers))
+	}, uint64(len(routers)))
 	for _, r := range routers {
-		wg.Add(1)
 		go func(r *ParallelRouter) {
-			defer wg.Done()
+			defer fwg.Done()
 			log.Debug("executeParallel: starting execution for router ", r.Router,
 				" with timeout ", r.Timeout,
 				" and ignore errors ", r.IgnoreError,
@@ -302,12 +299,6 @@ func executeParallel(
 		}(r)
 	}
 
-	go func() {
-		wg.Wait()
-		close(errCh)
-		log.Debug("executeParallel: finished executing all routers ", len(routers))
-	}()
-
 	var errOut error
 	for err := range errCh {
 		errOut = multierror.Append(errOut, err)
@@ -328,97 +319,99 @@ func getChannelOrErrorParallel[T any](
 ) (chan T, error) {
 	outCh := make(chan T)
 	errCh := make(chan error)
-	var wg sync.WaitGroup
 	ctx, cancelAll := context.WithCancel(ctx)
+	fwg := jsync.NewFWaitGroup(func() {
+		close(outCh)
+		close(errCh)
+		cancelAll()
+		log.Debug("getChannelOrErrorParallel: finished executing all routers ", len(routers))
+	}, uint64(len(routers)))
+
 	for _, r := range routers {
-		wg.Add(1)
 		go func(r *ParallelRouter) {
-			defer wg.Done()
+			defer fwg.Done()
+
 			log.Debug("getChannelOrErrorParallel: starting execution for router ", r.Router,
 				" with timeout ", r.Timeout,
 				" and ignore errors ", r.IgnoreError,
 			)
-			tim := time.NewTimer(r.ExecuteAfter)
-			defer tim.Stop()
-			select {
-			case <-ctx.Done():
-				log.Debug("getChannelOrErrorParallel: stopping execution on router on context done for router ", r.Router,
-					" with timeout ", r.Timeout,
-					" and ignore errors ", r.IgnoreError,
-				)
-				return
-			case <-tim.C:
-				ctx, cancel := withCancelAndOptionalTimeout(ctx, r.Timeout)
-				defer cancel()
 
-				log.Debug("getChannelOrErrorParallel: calling router function for router ", r.Router,
-					" with timeout ", r.Timeout,
-					" and ignore errors ", r.IgnoreError,
-				)
-				valueChan, err := f(ctx, r.Router)
-				if err != nil && !r.IgnoreError {
-					log.Debug("getChannelOrErrorParallel: error calling router function for router ", r.Router,
+			if r.ExecuteAfter != 0 {
+				tim := time.NewTimer(r.ExecuteAfter)
+				defer tim.Stop()
+				select {
+				case <-ctx.Done():
+					log.Debug("getChannelOrErrorParallel: stopping execution on router on context done for router ", r.Router,
 						" with timeout ", r.Timeout,
 						" and ignore errors ", r.IgnoreError,
-						" with error ", err,
 					)
-					select {
-					case <-ctx.Done():
-					case errCh <- err:
-					}
 					return
+				case <-tim.C:
+					// ready
 				}
-				for {
+			}
+
+			ctx, cancel := withCancelAndOptionalTimeout(ctx, r.Timeout)
+			defer cancel()
+
+			log.Debug("getChannelOrErrorParallel: calling router function for router ", r.Router,
+				" with timeout ", r.Timeout,
+				" and ignore errors ", r.IgnoreError,
+			)
+			valueChan, err := f(ctx, r.Router)
+			if err != nil && !r.IgnoreError {
+				log.Debug("getChannelOrErrorParallel: error calling router function for router ", r.Router,
+					" with timeout ", r.Timeout,
+					" and ignore errors ", r.IgnoreError,
+					" with error ", err,
+				)
+				select {
+				case <-ctx.Done():
+				case errCh <- err:
+				}
+				return
+			}
+			for {
+				select {
+				case <-ctx.Done():
+					log.Debug("getChannelOrErrorParallel: stopping execution on router on context done inside loop for router ", r.Router,
+						" with timeout ", r.Timeout,
+						" and ignore errors ", r.IgnoreError,
+					)
+					return
+				case val, ok := <-valueChan:
+					log.Debug("getChannelOrErrorParallel: getting channel value for router ", r.Router,
+						" with timeout ", r.Timeout,
+						" and ignore errors ", r.IgnoreError,
+						" closed channel: ", ok,
+					)
+					if !ok {
+						return
+					}
+
 					select {
 					case <-ctx.Done():
-						log.Debug("getChannelOrErrorParallel: stopping execution on router on context done inside loop for router ", r.Router,
+						log.Debug("getChannelOrErrorParallel: stopping execution on router on context done inside select for router ", r.Router,
 							" with timeout ", r.Timeout,
 							" and ignore errors ", r.IgnoreError,
 						)
 						return
-					case val, ok := <-valueChan:
-						log.Debug("getChannelOrErrorParallel: getting channel value for router ", r.Router,
+					case outCh <- val:
+					}
+
+					if shouldStop() {
+						log.Debug("getChannelOrErrorParallel: stopping channel iteration for router ", r.Router,
 							" with timeout ", r.Timeout,
 							" and ignore errors ", r.IgnoreError,
 							" closed channel: ", ok,
 						)
-						if !ok {
-							return
-						}
-
-						select {
-						case <-ctx.Done():
-							log.Debug("getChannelOrErrorParallel: stopping execution on router on context done inside select for router ", r.Router,
-								" with timeout ", r.Timeout,
-								" and ignore errors ", r.IgnoreError,
-							)
-							return
-						case outCh <- val:
-						}
-
-						if shouldStop() {
-							log.Debug("getChannelOrErrorParallel: stopping channel iteration for router ", r.Router,
-								" with timeout ", r.Timeout,
-								" and ignore errors ", r.IgnoreError,
-								" closed channel: ", ok,
-							)
-							cancelAll()
-							return
-						}
+						cancelAll()
+						return
 					}
 				}
 			}
 		}(r)
 	}
-
-	// goroutine closing everything when finishing execution
-	go func() {
-		wg.Wait()
-		close(outCh)
-		close(errCh)
-		cancelAll()
-		log.Debug("getChannelOrErrorParallel: finished executing all routers ", len(routers))
-	}()
 
 	select {
 	case err, ok := <-errCh:
