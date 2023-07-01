@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/Jorropo/jsync"
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
 	record "github.com/libp2p/go-libp2p-record"
@@ -171,17 +172,20 @@ func (r Parallel) search(ctx context.Context, do func(routing.Routing) (<-chan [
 
 	out := make(chan []byte)
 
-	var wg sync.WaitGroup
+	fwg := jsync.NewFWaitGroup(func() {
+		close(out)
+		cancel()
+	}, 1)
 	for _, ri := range r.Routers {
 		vchan, err := do(ri)
 		if err != nil {
 			continue
 		}
 
-		wg.Add(1)
+		fwg.Add()
 		go func() {
 			var sent int
-			defer wg.Done()
+			defer fwg.Done()
 
 			for {
 				select {
@@ -206,11 +210,7 @@ func (r Parallel) search(ctx context.Context, do func(routing.Routing) (<-chan [
 		}()
 	}
 
-	go func() {
-		wg.Wait()
-		close(out)
-		cancel()
-	}()
+	fwg.Done()
 
 	return out, nil
 }
