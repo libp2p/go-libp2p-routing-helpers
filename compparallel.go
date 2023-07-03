@@ -17,9 +17,10 @@ import (
 
 var log = logging.Logger("routing/composable")
 
-var _ routing.Routing = &composableParallel{}
-var _ ProvideManyRouter = &composableParallel{}
-var _ ComposableRouter = &composableParallel{}
+var _ routing.Routing = (*composableParallel)(nil)
+var _ ProvideManyRouter = (*composableParallel)(nil)
+var _ ReadyAbleRouter = (*composableParallel)(nil)
+var _ ComposableRouter = (*composableParallel)(nil)
 
 type composableParallel struct {
 	routers []*ParallelRouter
@@ -53,7 +54,8 @@ func (r *composableParallel) Provide(ctx context.Context, cid cid.Cid, provide b
 	)
 }
 
-// ProvideMany will call all supported Routers in parallel.
+// ProvideMany will call all Routers in parallel, falling back to iterative
+// single Provide call for routers which do not support [ProvideManyRouter].
 func (r *composableParallel) ProvideMany(ctx context.Context, keys []multihash.Multihash) error {
 	return executeParallel(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) error {
@@ -71,7 +73,7 @@ func (r *composableParallel) ProvideMany(ctx context.Context, keys []multihash.M
 	)
 }
 
-// Ready will call all supported ProvideMany Routers SEQUENTIALLY.
+// Ready will call all supported [ReadyAbleRouter] Routers SEQUENTIALLY.
 // If some of them are not ready, this method will return false.
 func (r *composableParallel) Ready() bool {
 	for _, ro := range r.routers {

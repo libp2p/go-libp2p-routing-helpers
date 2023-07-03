@@ -11,9 +11,10 @@ import (
 	"github.com/multiformats/go-multihash"
 )
 
-var _ routing.Routing = &composableSequential{}
-var _ ProvideManyRouter = &composableSequential{}
-var _ ComposableRouter = &composableSequential{}
+var _ routing.Routing = (*composableSequential)(nil)
+var _ ProvideManyRouter = (*composableSequential)(nil)
+var _ ReadyAbleRouter = (*composableSequential)(nil)
+var _ ComposableRouter = (*composableSequential)(nil)
 
 type composableSequential struct {
 	routers []*SequentialRouter
@@ -44,7 +45,8 @@ func (r *composableSequential) Provide(ctx context.Context, cid cid.Cid, provide
 		})
 }
 
-// ProvideMany will call all supported Routers sequentially.
+// ProvideMany will call all Routers in parallel, falling back to iterative
+// single Provide call for routers which do not support [ProvideManyRouter].
 func (r *composableSequential) ProvideMany(ctx context.Context, keys []multihash.Multihash) error {
 	return executeSequential(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) error {
@@ -62,7 +64,7 @@ func (r *composableSequential) ProvideMany(ctx context.Context, keys []multihash
 	)
 }
 
-// Ready will call all supported ProvideMany Routers sequentially.
+// Ready will call all supported [ReadyAbleRouter] sequentially.
 // If some of them are not ready, this method will return false.
 func (r *composableSequential) Ready() bool {
 	for _, ro := range r.routers {
