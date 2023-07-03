@@ -104,11 +104,11 @@ func TestComposableParallelFixtures(t *testing.T) {
 				{key: "a", value: "av", searchValCount: 2},
 			},
 			PutValue: []putValueFixture{
-				{err: errors.New("2 errors occurred:\n\t* a\n\t* a\n\n"), key: "/error/a", value: "a"},
+				{err: errors.New("a; a"), key: "/error/a", value: "a"},
 				{key: "a", value: "a"},
 			},
 			Provide: []provideFixture{{
-				err: errors.New("2 errors occurred:\n\t* routing: operation or key not supported\n\t* routing: operation or key not supported\n\n"),
+				err: errors.New("routing: operation or key not supported; routing: operation or key not supported"),
 			}},
 			FindPeer:    []findPeerFixture{{peerID: "pid1"}, {peerID: "pid3"}},
 			SearchValue: []searchValueFixture{{key: "a", vals: []string{"a", "a"}}},

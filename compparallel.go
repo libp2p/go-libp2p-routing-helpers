@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Jorropo/jsync"
-	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -258,55 +257,64 @@ func executeParallel(
 	routers []*ParallelRouter,
 	f func(context.Context, routing.Routing,
 	) error) error {
-	errCh := make(chan error)
+	var ready sync.RWMutex
+	ready.Lock()
+	var errorsLk sync.Mutex
+	var errors []error
 	fwg := jsync.NewFWaitGroup(func() {
-		close(errCh)
+		ready.Unlock()
 		log.Debug("executeParallel: finished executing all routers ", len(routers))
 	}, uint64(len(routers)))
 	for _, r := range routers {
 		go func(r *ParallelRouter) {
 			defer fwg.Done()
-			log.Debug("executeParallel: starting execution for router ", r.Router,
-				" with timeout ", r.Timeout,
-				" and ignore errors ", r.IgnoreError,
-			)
-			tim := time.NewTimer(r.ExecuteAfter)
-			defer tim.Stop()
-			select {
-			case <-ctx.Done():
-				if !r.IgnoreError {
-					log.Debug("executeParallel: stopping execution on router on context done for router ", r.Router,
-						" with timeout ", r.Timeout,
-						" and ignore errors ", r.IgnoreError,
-					)
-					errCh <- ctx.Err()
-				}
-			case <-tim.C:
-				ctx, cancel := withCancelAndOptionalTimeout(ctx, r.Timeout)
-				defer cancel()
 
-				log.Debug("executeParallel: calling router function for router ", r.Router,
+			if err := func() error {
+				log.Debug("executeParallel: starting execution for router ", r.Router,
 					" with timeout ", r.Timeout,
 					" and ignore errors ", r.IgnoreError,
 				)
-				err := f(ctx, r.Router)
-				if err != nil &&
-					!r.IgnoreError {
-					log.Debug("executeParallel: error calling router function for router ", r.Router,
+				tim := time.NewTimer(r.ExecuteAfter)
+				defer tim.Stop()
+				select {
+				case <-ctx.Done():
+					if !r.IgnoreError {
+						log.Debug("executeParallel: stopping execution on router on context done for router ", r.Router,
+							" with timeout ", r.Timeout,
+							" and ignore errors ", r.IgnoreError,
+						)
+						return ctx.Err()
+					}
+				case <-tim.C:
+					ctx, cancel := withCancelAndOptionalTimeout(ctx, r.Timeout)
+					defer cancel()
+
+					log.Debug("executeParallel: calling router function for router ", r.Router,
 						" with timeout ", r.Timeout,
 						" and ignore errors ", r.IgnoreError,
-						" with error ", err,
 					)
-					errCh <- err
+					if err := f(ctx, r.Router); err != nil &&
+						!r.IgnoreError {
+						log.Debug("executeParallel: error calling router function for router ", r.Router,
+							" with timeout ", r.Timeout,
+							" and ignore errors ", r.IgnoreError,
+							" with error ", err,
+						)
+						return err
+					}
 				}
+
+				return nil
+			}(); err != nil {
+				errorsLk.Lock()
+				defer errorsLk.Unlock()
+				errors = append(errors, err)
 			}
 		}(r)
 	}
 
-	var errOut error
-	for err := range errCh {
-		errOut = multierror.Append(errOut, err)
-	}
+	ready.Lock()
+	errOut := multierr.Combine(errors...)
 
 	if errOut != nil {
 		log.Debug("executeParallel: finished executing all routers with error: ", errOut)
