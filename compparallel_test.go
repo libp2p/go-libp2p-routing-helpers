@@ -67,8 +67,6 @@ type searchValueFixture struct {
 }
 
 func TestComposableParallelFixtures(t *testing.T) {
-	canceledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
 	fixtures := []struct {
 		Name        string
 		routers     []*ParallelRouter
@@ -242,19 +240,6 @@ func TestComposableParallelFixtures(t *testing.T) {
 			},
 		},
 		{
-			Name: "SearchValue returns an error",
-			routers: []*ParallelRouter{{
-				Timeout:     time.Second,
-				IgnoreError: false,
-				Router: &Compose{
-					ValueStore:     newDummyValueStore(t, []string{"a", "a"}, []string{"b", "c"}),
-					PeerRouting:    Null{},
-					ContentRouting: Null{},
-				},
-			}},
-			SearchValue: []searchValueFixture{{key: "a", ctx: canceledCtx, err: context.Canceled}},
-		},
-		{
 			Name: "timeout=0 should disable the timeout, two routers with one disabled timeout should timeout on the other router",
 			routers: []*ParallelRouter{
 				{
@@ -335,6 +320,7 @@ func TestComposableParallelFixtures(t *testing.T) {
 				require.NoError(err)
 				require.Equal(fpf.peerID, string(addr.ID))
 			}
+
 			for _, svf := range f.SearchValue {
 				ctx := context.Background()
 				if svf.ctx != nil {

@@ -3,6 +3,7 @@ package routinghelpers
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/multiformats/go-multihash"
+	"go.uber.org/multierr"
 )
 
 var log = logging.Logger("routing/composable")
@@ -319,12 +321,22 @@ func getChannelOrErrorParallel[T any](
 	f func(context.Context, routing.Routing) (<-chan T, error),
 	shouldStop func() bool,
 ) (chan T, error) {
-	outCh := make(chan T)
-	errCh := make(chan error)
+
+	var ready sync.Mutex
+	ready.Lock()
+	var outCh chan T
+	var errorsLk sync.Mutex
+	// nil errors indicate sucess
+	errors := []error{}
+
 	ctx, cancelAll := context.WithCancel(ctx)
 	fwg := jsync.NewFWaitGroup(func() {
-		close(outCh)
-		close(errCh)
+		if outCh != nil {
+			close(outCh)
+		} else {
+			ready.Unlock()
+		}
+
 		cancelAll()
 		log.Debug("getChannelOrErrorParallel: finished executing all routers ", len(routers))
 	}, uint64(len(routers)))
@@ -361,18 +373,29 @@ func getChannelOrErrorParallel[T any](
 				" and ignore errors ", r.IgnoreError,
 			)
 			valueChan, err := f(ctx, r.Router)
-			if err != nil && !r.IgnoreError {
-				log.Debug("getChannelOrErrorParallel: error calling router function for router ", r.Router,
-					" with timeout ", r.Timeout,
-					" and ignore errors ", r.IgnoreError,
-					" with error ", err,
-				)
-				select {
-				case <-ctx.Done():
-				case errCh <- err:
+			if err != nil {
+				if r.IgnoreError {
+					return
 				}
+
+				errorsLk.Lock()
+				defer errorsLk.Unlock()
+				if errors == nil {
+					return
+				}
+				errors = append(errors, err)
+
 				return
 			}
+
+			errorsLk.Lock()
+			if outCh == nil {
+				outCh = make(chan T)
+				errors = nil
+				ready.Unlock()
+			}
+			errorsLk.Unlock()
+
 			for {
 				select {
 				case <-ctx.Done():
@@ -415,21 +438,10 @@ func getChannelOrErrorParallel[T any](
 		}(r)
 	}
 
-	select {
-	case err, ok := <-errCh:
-		if !ok {
-			log.Debug("getChannelOrErrorParallel: closed error channel")
-			return outCh, routing.ErrNotFound
-		}
-		log.Debug("getChannelOrErrorParallel: error on method execution: ", err)
-
-		return outCh, err
-	case <-ctx.Done():
-		err := ctx.Err()
-		log.Debug("getChannelOrErrorParallel: context done: ", err)
-		return outCh, err
-	default:
-		log.Debug("getChannelOrErrorParallel: returning channel")
+	ready.Lock()
+	if outCh != nil {
 		return outCh, nil
+	} else {
+		return nil, multierr.Combine(errors...)
 	}
 }
