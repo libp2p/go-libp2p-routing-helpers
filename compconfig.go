@@ -9,10 +9,11 @@ import (
 )
 
 type ParallelRouter struct {
-	Timeout      time.Duration
-	IgnoreError  bool
-	Router       routing.Routing
-	ExecuteAfter time.Duration
+	Timeout                        time.Duration
+	Router                         routing.Routing
+	ExecuteAfter                   time.Duration
+	DoNotWaitForStreamingResponses bool
+	IgnoreError                    bool
 }
 
 type SequentialRouter struct {
