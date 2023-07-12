@@ -114,6 +114,48 @@ func TestComposableParallelFixtures(t *testing.T) {
 			SearchValue: []searchValueFixture{{key: "a", vals: []string{"a", "a"}}},
 		},
 		{
+			Name: "simple two routers, one with delay, plus a third nothing DoNotWaitForStreamingResponses router",
+			routers: []*ParallelRouter{
+				{
+					Timeout:     time.Second,
+					IgnoreError: false,
+					Router: &Compose{
+						ValueStore:     newDummyValueStore(t, []string{"a", "b", "c"}, []string{"av", "bv", "cv"}),
+						PeerRouting:    newDummyPeerRouting(t, []peer.ID{"pid1", "pid2"}),
+						ContentRouting: Null{},
+					},
+				},
+				{
+					Timeout:      time.Minute,
+					IgnoreError:  false,
+					ExecuteAfter: time.Second,
+					Router: &Compose{
+						ValueStore:     newDummyValueStore(t, []string{"a", "d"}, []string{"av2", "dv"}),
+						PeerRouting:    newDummyPeerRouting(t, []peer.ID{"pid1", "pid3"}),
+						ContentRouting: Null{},
+					},
+				},
+				{
+					DoNotWaitForStreamingResponses: true,
+					IgnoreError:                    true,
+					Router:                         nothing{},
+				},
+			},
+			GetValue: []getValueFixture{
+				{key: "d", value: "dv", searchValCount: 1},
+				{key: "a", value: "av", searchValCount: 2},
+			},
+			PutValue: []putValueFixture{
+				{err: errors.New("a; a"), key: "/error/a", value: "a"},
+				{key: "a", value: "a"},
+			},
+			Provide: []provideFixture{{
+				err: errors.New("routing: operation or key not supported; routing: operation or key not supported"),
+			}},
+			FindPeer:    []findPeerFixture{{peerID: "pid1"}, {peerID: "pid3"}},
+			SearchValue: []searchValueFixture{{key: "a", vals: []string{"a", "a"}}},
+		},
+		{
 			Name: "two routers with ignore errors",
 			routers: []*ParallelRouter{
 				{

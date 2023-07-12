@@ -255,19 +255,16 @@ func getValueOrErrorParallel[T any](
 func executeParallel(
 	ctx context.Context,
 	routers []*ParallelRouter,
-	f func(context.Context, routing.Routing,
-	) error) error {
-	var ready sync.RWMutex
-	ready.Lock()
-	var errorsLk sync.Mutex
-	var errors []error
-	fwg := jsync.NewFWaitGroup(func() {
-		ready.Unlock()
-		log.Debug("executeParallel: finished executing all routers ", len(routers))
-	}, uint64(len(routers)))
+	f func(context.Context, routing.Routing) error,
+) error {
+	var errsLk sync.Mutex
+	var errs []error
+	var wg sync.WaitGroup
+	wg.Add(len(routers))
+
 	for _, r := range routers {
-		go func(r *ParallelRouter) {
-			defer fwg.Done()
+		go func(r *ParallelRouter, ctx context.Context) {
+			defer wg.Done()
 
 			if err := func() error {
 				log.Debug("executeParallel: starting execution for router ", r.Router,
@@ -293,8 +290,7 @@ func executeParallel(
 						" with timeout ", r.Timeout,
 						" and ignore errors ", r.IgnoreError,
 					)
-					if err := f(ctx, r.Router); err != nil &&
-						!r.IgnoreError {
+					if err := f(ctx, r.Router); err != nil && !r.IgnoreError {
 						log.Debug("executeParallel: error calling router function for router ", r.Router,
 							" with timeout ", r.Timeout,
 							" and ignore errors ", r.IgnoreError,
@@ -306,15 +302,15 @@ func executeParallel(
 
 				return nil
 			}(); err != nil {
-				errorsLk.Lock()
-				defer errorsLk.Unlock()
-				errors = append(errors, err)
+				errsLk.Lock()
+				defer errsLk.Unlock()
+				errs = append(errs, err)
 			}
-		}(r)
+		}(r, ctx)
 	}
 
-	ready.Lock()
-	errOut := multierr.Combine(errors...)
+	wg.Wait()
+	errOut := multierr.Combine(errs...)
 
 	if errOut != nil {
 		log.Debug("executeParallel: finished executing all routers with error: ", errOut)
@@ -329,7 +325,6 @@ func getChannelOrErrorParallel[T any](
 	f func(context.Context, routing.Routing) (<-chan T, error),
 	shouldStop func() bool,
 ) (chan T, error) {
-
 	var ready sync.Mutex
 	ready.Lock()
 	var outCh chan T
@@ -346,27 +341,39 @@ func getChannelOrErrorParallel[T any](
 		}
 
 		cancelAll()
-		log.Debug("getChannelOrErrorParallel: finished executing all routers ", len(routers))
 	}, uint64(len(routers)))
 
+	var blocking atomic.Uint64
+	blocking.Add(1) // start at one so we don't cancel while dispatching
+	var sent atomic.Bool
+
 	for _, r := range routers {
+		if !r.DoNotWaitForStreamingResponses {
+			blocking.Add(1)
+		}
+
 		go func(r *ParallelRouter) {
 			defer fwg.Done()
+			defer func() {
+				var remainingBlockers uint64
+				if r.DoNotWaitForStreamingResponses {
+					remainingBlockers = blocking.Load()
+				} else {
+					var minusOne uint64
+					minusOne--
+					remainingBlockers = blocking.Add(minusOne)
+				}
 
-			log.Debug("getChannelOrErrorParallel: starting execution for router ", r.Router,
-				" with timeout ", r.Timeout,
-				" and ignore errors ", r.IgnoreError,
-			)
+				if remainingBlockers == 0 && sent.Load() {
+					cancelAll()
+				}
+			}()
 
 			if r.ExecuteAfter != 0 {
 				tim := time.NewTimer(r.ExecuteAfter)
 				defer tim.Stop()
 				select {
 				case <-ctx.Done():
-					log.Debug("getChannelOrErrorParallel: stopping execution on router on context done for router ", r.Router,
-						" with timeout ", r.Timeout,
-						" and ignore errors ", r.IgnoreError,
-					)
 					return
 				case <-tim.C:
 					// ready
@@ -376,10 +383,6 @@ func getChannelOrErrorParallel[T any](
 			ctx, cancel := withCancelAndOptionalTimeout(ctx, r.Timeout)
 			defer cancel()
 
-			log.Debug("getChannelOrErrorParallel: calling router function for router ", r.Router,
-				" with timeout ", r.Timeout,
-				" and ignore errors ", r.IgnoreError,
-			)
 			valueChan, err := f(ctx, r.Router)
 			if err != nil {
 				if r.IgnoreError {
@@ -396,48 +399,33 @@ func getChannelOrErrorParallel[T any](
 				return
 			}
 
-			errorsLk.Lock()
-			if outCh == nil {
-				outCh = make(chan T)
-				errors = nil
-				ready.Unlock()
-			}
-			errorsLk.Unlock()
-
-			for {
+			for first := true; true; first = false {
 				select {
 				case <-ctx.Done():
-					log.Debug("getChannelOrErrorParallel: stopping execution on router on context done inside loop for router ", r.Router,
-						" with timeout ", r.Timeout,
-						" and ignore errors ", r.IgnoreError,
-					)
 					return
 				case val, ok := <-valueChan:
-					log.Debug("getChannelOrErrorParallel: getting channel value for router ", r.Router,
-						" with timeout ", r.Timeout,
-						" and ignore errors ", r.IgnoreError,
-						" closed channel: ", ok,
-					)
 					if !ok {
 						return
 					}
 
+					if first {
+						errorsLk.Lock()
+						if outCh == nil {
+							outCh = make(chan T)
+							errors = nil
+							ready.Unlock()
+						}
+						errorsLk.Unlock()
+					}
+
 					select {
 					case <-ctx.Done():
-						log.Debug("getChannelOrErrorParallel: stopping execution on router on context done inside select for router ", r.Router,
-							" with timeout ", r.Timeout,
-							" and ignore errors ", r.IgnoreError,
-						)
 						return
 					case outCh <- val:
+						sent.Store(true)
 					}
 
 					if shouldStop() {
-						log.Debug("getChannelOrErrorParallel: stopping channel iteration for router ", r.Router,
-							" with timeout ", r.Timeout,
-							" and ignore errors ", r.IgnoreError,
-							" closed channel: ", ok,
-						)
 						cancelAll()
 						return
 					}
@@ -446,9 +434,21 @@ func getChannelOrErrorParallel[T any](
 		}(r)
 	}
 
+	// remove the dispatch count and check if we should cancel
+	var minusOne uint64
+	minusOne--
+	if blocking.Add(minusOne) == 0 && sent.Load() {
+		cancelAll()
+	}
+
 	ready.Lock()
 	if outCh != nil {
 		return outCh, nil
+	} else if len(errors) == 0 {
+		// found nothing
+		ch := make(chan T)
+		close(ch)
+		return ch, nil
 	} else {
 		return nil, multierr.Combine(errors...)
 	}
