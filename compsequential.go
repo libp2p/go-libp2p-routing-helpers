@@ -45,7 +45,7 @@ func (r *composableSequential) Provide(ctx context.Context, cid cid.Cid, provide
 		})
 }
 
-// ProvideMany will call all Routers in parallel, falling back to iterative
+// ProvideMany will call all supported Routers sequentially, falling back to iterative
 // single Provide call for routers which do not support [ProvideManyRouter].
 func (r *composableSequential) ProvideMany(ctx context.Context, keys []multihash.Multihash) error {
 	return executeSequential(ctx, r.routers,

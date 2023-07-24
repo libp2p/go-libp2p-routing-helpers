@@ -136,9 +136,9 @@ func TestComposableParallelFixtures(t *testing.T) {
 					},
 				},
 				{
-					DoNotWaitForStreamingResponses: true,
-					IgnoreError:                    true,
-					Router:                         nothing{},
+					DoNotWaitForSearchValue: true,
+					IgnoreError:             true,
+					Router:                  nothing{},
 				},
 			},
 			GetValue: []getValueFixture{
