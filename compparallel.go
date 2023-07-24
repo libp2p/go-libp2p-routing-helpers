@@ -107,7 +107,7 @@ func (r *composableParallel) FindProvidersAsync(ctx context.Context, cid cid.Cid
 				return false
 			}
 			return atomic.AddInt64(&totalCount, 1) >= int64(count)
-		},
+		}, false,
 	)
 
 	return ch
@@ -149,7 +149,7 @@ func (r *composableParallel) SearchValue(ctx context.Context, key string, opts .
 		func(ctx context.Context, r routing.Routing) (<-chan []byte, error) {
 			return r.SearchValue(ctx, key, opts...)
 		},
-		func() bool { return false },
+		func() bool { return false }, true,
 	)
 }
 
@@ -303,8 +303,8 @@ func executeParallel(
 				return nil
 			}(); err != nil {
 				errsLk.Lock()
-				defer errsLk.Unlock()
 				errs = append(errs, err)
+				errsLk.Unlock()
 			}
 		}(r, ctx)
 	}
@@ -323,12 +323,14 @@ func getChannelOrErrorParallel[T any](
 	ctx context.Context,
 	routers []*ParallelRouter,
 	f func(context.Context, routing.Routing) (<-chan T, error),
-	shouldStop func() bool,
+	shouldStop func() bool, isSearchValue bool,
 ) (chan T, error) {
+	// ready is a mutex that starts locked, it will stay locked until at least one of the channels got an item,
+	// this make us return only when ready.
 	var ready sync.Mutex
 	ready.Lock()
+	var resultsLk sync.Mutex
 	var outCh chan T
-	var errorsLk sync.Mutex
 	// nil errors indicate sucess
 	errors := []error{}
 
@@ -348,7 +350,7 @@ func getChannelOrErrorParallel[T any](
 	var sent atomic.Bool
 
 	for _, r := range routers {
-		if !r.DoNotWaitForStreamingResponses {
+		if !isSearchValue || !r.DoNotWaitForSearchValue {
 			blocking.Add(1)
 		}
 
@@ -356,7 +358,7 @@ func getChannelOrErrorParallel[T any](
 			defer fwg.Done()
 			defer func() {
 				var remainingBlockers uint64
-				if r.DoNotWaitForStreamingResponses {
+				if isSearchValue && r.DoNotWaitForSearchValue {
 					remainingBlockers = blocking.Load()
 				} else {
 					var minusOne uint64
@@ -389,8 +391,8 @@ func getChannelOrErrorParallel[T any](
 					return
 				}
 
-				errorsLk.Lock()
-				defer errorsLk.Unlock()
+				resultsLk.Lock()
+				defer resultsLk.Unlock()
 				if errors == nil {
 					return
 				}
@@ -409,13 +411,13 @@ func getChannelOrErrorParallel[T any](
 					}
 
 					if first {
-						errorsLk.Lock()
+						resultsLk.Lock()
 						if outCh == nil {
 							outCh = make(chan T)
 							errors = nil
 							ready.Unlock()
 						}
-						errorsLk.Unlock()
+						resultsLk.Unlock()
 					}
 
 					select {
