@@ -96,7 +96,7 @@ func (r *composableParallel) Ready() bool {
 // To gather providers from a set of Routers first, you can use the ExecuteAfter timer to delay some Router execution.
 func (r *composableParallel) FindProvidersAsync(ctx context.Context, cid cid.Cid, count int) <-chan peer.AddrInfo {
 	var totalCount int64
-	ch, _ := getChannelOrErrorParallel(
+	ch, err := getChannelOrErrorParallel(
 		ctx,
 		r.routers,
 		func(ctx context.Context, r routing.Routing) (<-chan peer.AddrInfo, error) {
@@ -109,6 +109,11 @@ func (r *composableParallel) FindProvidersAsync(ctx context.Context, cid cid.Cid
 			return atomic.AddInt64(&totalCount, 1) >= int64(count)
 		}, false,
 	)
+
+	if err != nil {
+		ch = make(chan peer.AddrInfo)
+		close(ch)
+	}
 
 	return ch
 }
