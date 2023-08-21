@@ -10,6 +10,8 @@ import (
 )
 
 func TestNull(t *testing.T) {
+	t.Parallel()
+
 	var n Null
 	ctx := context.Background()
 	if err := n.PutValue(ctx, "anything", nil); err != routing.ErrNotSupported {

@@ -13,6 +13,8 @@ import (
 )
 
 func TestNoResultsSequential(t *testing.T) {
+	t.Parallel()
+
 	require := require.New(t)
 	rs := []*SequentialRouter{
 		{
@@ -41,6 +43,8 @@ func TestNoResultsSequential(t *testing.T) {
 }
 
 func TestComposableSequentialFixtures(t *testing.T) {
+	t.Parallel()
+
 	type getValueFixture struct {
 		err            error
 		key            string
@@ -337,6 +341,7 @@ func TestComposableSequentialFixtures(t *testing.T) {
 		f := f
 		t.Run(f.Name, func(t *testing.T) {
 			t.Parallel()
+
 			require := require.New(t)
 			cpr := NewComposableSequential(f.routers)
 			for _, gvf := range f.GetValueFixtures {
