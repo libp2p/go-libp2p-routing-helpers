@@ -107,10 +107,10 @@ func (d *dummyValueStore) SearchValue(ctx context.Context, key string, opts ...r
 	return out, nil
 }
 
-type dummyProvider map[string][]peer.ID
+type dummyProvider map[cid.Cid][]peer.ID
 
 func (d dummyProvider) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan peer.AddrInfo {
-	peers := d[c.KeyString()]
+	peers := d[c]
 	if count > 0 && len(peers) > count {
 		peers = peers[:count]
 	}
@@ -125,6 +125,7 @@ func (d dummyProvider) FindProvidersAsync(ctx context.Context, c cid.Cid, count 
 			select {
 			case out <- peer.AddrInfo{ID: p}:
 			case <-ctx.Done():
+				return
 			}
 		}
 	}()

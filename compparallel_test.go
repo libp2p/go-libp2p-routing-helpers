@@ -9,6 +9,7 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
+	mh "github.com/multiformats/go-multihash"
 	"github.com/stretchr/testify/require"
 )
 
@@ -427,4 +428,52 @@ func newDummyValueStore(t testing.TB, keys []string, values []string) routing.Va
 	}
 
 	return dvs
+}
+
+type nothingContentRouter struct{}
+
+func (nothingContentRouter) FindProvidersAsync(ctx context.Context, _ cid.Cid, _ int) <-chan peer.AddrInfo {
+	c := make(chan peer.AddrInfo)
+	go func() {
+		<-ctx.Done()
+		close(c)
+	}()
+	return c
+}
+
+func (nothingContentRouter) Provide(context.Context, cid.Cid, bool) error {
+	return nil
+}
+
+func TestFindProvsAboveCount(t *testing.T) {
+	t.Parallel()
+
+	prefix := cid.NewPrefixV1(cid.Raw, mh.SHA2_256)
+	c, err := prefix.Sum([]byte("foo"))
+	require.NoError(t, err)
+
+	d := NewComposableParallel([]*ParallelRouter{
+		{
+			Router: &Compose{
+				ValueStore:     Null{},
+				PeerRouting:    Null{},
+				ContentRouting: dummyProvider{c: {"1", "2", "3"}}},
+		},
+		{
+			Router: &Compose{
+				ValueStore:     Null{},
+				PeerRouting:    Null{},
+				ContentRouting: nothingContentRouter{}},
+		},
+	})
+	ch := d.FindProvidersAsync(context.Background(), c, 2)
+	var count int
+	for ; ; count++ {
+		v, ok := <-ch
+		if !ok {
+			break
+		}
+		t.Log(v.ID)
+	}
+	require.Equal(t, 2, count)
 }

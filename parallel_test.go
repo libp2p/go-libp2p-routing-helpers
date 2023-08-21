@@ -197,7 +197,7 @@ func TestParallelFindProviders(t *testing.T) {
 				Routers: []routing.Routing{
 					&Compose{
 						ContentRouting: dummyProvider{
-							cid1.KeyString(): []peer.ID{
+							cid1: []peer.ID{
 								"first",
 								"second",
 								"third",
@@ -205,12 +205,12 @@ func TestParallelFindProviders(t *testing.T) {
 								"fifth",
 								"sixth",
 							},
-							cid2.KeyString(): []peer.ID{
+							cid2: []peer.ID{
 								"fourth",
 								"fifth",
 								"sixth",
 							},
-							cid5.KeyString(): []peer.ID{
+							cid5: []peer.ID{
 								"before",
 								"stall",
 								"after",
@@ -224,13 +224,13 @@ func TestParallelFindProviders(t *testing.T) {
 					Null{},
 					&Compose{
 						ContentRouting: dummyProvider{
-							cid1.KeyString(): []peer.ID{
+							cid1: []peer.ID{
 								"first",
 								"second",
 								"fifth",
 								"sixth",
 							},
-							cid2.KeyString(): []peer.ID{
+							cid2: []peer.ID{
 								"second",
 								"fourth",
 								"fifth",
@@ -245,10 +245,10 @@ func TestParallelFindProviders(t *testing.T) {
 					Namespaces: []string{"allow1"},
 				},
 				ContentRouting: dummyProvider{
-					cid2.KeyString(): []peer.ID{
+					cid2: []peer.ID{
 						"first",
 					},
-					cid3.KeyString(): []peer.ID{
+					cid3: []peer.ID{
 						"second",
 						"fourth",
 						"fifth",
