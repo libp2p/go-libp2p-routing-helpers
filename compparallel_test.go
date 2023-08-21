@@ -13,6 +13,8 @@ import (
 )
 
 func TestNoResults(t *testing.T) {
+	t.Parallel()
+
 	require := require.New(t)
 	rs := []*ParallelRouter{
 		{
@@ -67,6 +69,8 @@ type searchValueFixture struct {
 }
 
 func TestComposableParallelFixtures(t *testing.T) {
+	t.Parallel()
+
 	fixtures := []struct {
 		Name        string
 		routers     []*ParallelRouter
@@ -309,6 +313,7 @@ func TestComposableParallelFixtures(t *testing.T) {
 		f := f
 		t.Run(f.Name, func(t *testing.T) {
 			t.Parallel()
+
 			require := require.New(t)
 			cpr := NewComposableParallel(f.routers)
 			for _, gvf := range f.GetValue {

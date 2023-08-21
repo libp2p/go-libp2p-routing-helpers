@@ -47,6 +47,8 @@ func (testValidator) Select(key string, vals [][]byte) (int, error) {
 }
 
 func TestTieredSearch(t *testing.T) {
+	t.Parallel()
+
 	d := Tiered{
 		Validator: testValidator{},
 		Routers: []routing.Routing{
@@ -117,6 +119,8 @@ func TestTieredSearch(t *testing.T) {
 }
 
 func TestTieredGet(t *testing.T) {
+	t.Parallel()
+
 	d := Tiered{
 		Routers: []routing.Routing{
 			Null{},
@@ -194,6 +198,8 @@ func TestTieredGet(t *testing.T) {
 }
 
 func TestTieredNoSupport(t *testing.T) {
+	t.Parallel()
+
 	d := Tiered{Routers: []routing.Routing{Tiered{Routers: []routing.Routing{Null{}}}}}
 	if _, ok := <-d.FindProvidersAsync(context.Background(), cid.Cid{}, 0); ok {
 		t.Fatal("shouldn't have found a provider")
@@ -201,6 +207,8 @@ func TestTieredNoSupport(t *testing.T) {
 }
 
 func TestTieredClose(t *testing.T) {
+	t.Parallel()
+
 	closer := new(testCloser)
 	d := Tiered{
 		Routers: []routing.Routing{

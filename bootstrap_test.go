@@ -19,6 +19,8 @@ func (bs *bootstrapRouter) Bootstrap(ctx context.Context) error {
 }
 
 func TestBootstrap(t *testing.T) {
+	t.Parallel()
+
 	pings := make([]bool, 6)
 	d := Parallel{
 		Routers: []routing.Routing{
@@ -94,6 +96,8 @@ func TestBootstrap(t *testing.T) {
 
 }
 func TestBootstrapErr(t *testing.T) {
+	t.Parallel()
+
 	d := Parallel{
 		Routers: []routing.Routing{
 			Tiered{

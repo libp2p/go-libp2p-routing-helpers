@@ -8,6 +8,8 @@ import (
 )
 
 func TestLimitedValueStore(t *testing.T) {
+	t.Parallel()
+
 	d := LimitedValueStore{
 		ValueStore: new(dummyValueStore),
 		Namespaces: []string{"allow"},
@@ -65,6 +67,8 @@ func TestLimitedValueStore(t *testing.T) {
 }
 
 func TestLimitedClose(t *testing.T) {
+	t.Parallel()
+
 	closer := new(testCloser)
 	d := LimitedValueStore{
 		ValueStore: struct {

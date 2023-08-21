@@ -9,6 +9,8 @@ import (
 )
 
 func TestGetPublicKey(t *testing.T) {
+	t.Parallel()
+
 	d := Parallel{
 		Routers: []routing.Routing{
 			Parallel{
