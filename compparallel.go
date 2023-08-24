@@ -3,6 +3,8 @@ package routinghelpers
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,6 +16,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/multiformats/go-multihash"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/multierr"
 )
 
@@ -380,11 +384,22 @@ func getChannelOrErrorParallel[T any](
 	var sent atomic.Bool
 
 	for _, r := range routers {
-		if !isSearchValue || !r.DoNotWaitForSearchValue {
+		ctx, span := tracing.StartSpan(ctx, composeName+".worker")
+		isBlocking := !isSearchValue || !r.DoNotWaitForSearchValue
+		if isBlocking {
 			blocking.Add(1)
+		}
+		isRecording := span.IsRecording()
+		if isRecording {
+			span.SetAttributes(
+				attribute.Bool("blocking", isBlocking),
+				attribute.Stringer("type", reflect.TypeOf(r.Router)),
+				attribute.String("string", fmt.Sprint(r.Router)),
+			)
 		}
 
 		go func(r *ParallelRouter) {
+			defer span.End()
 			defer fwg.Done()
 			defer func() {
 				var remainingBlockers uint64
@@ -417,6 +432,10 @@ func getChannelOrErrorParallel[T any](
 
 			valueChan, err := f(ctx, r.Router)
 			if err != nil {
+				if isRecording {
+					span.SetStatus(codes.Error, err.Error())
+				}
+
 				if r.IgnoreError {
 					return
 				}
@@ -430,6 +449,9 @@ func getChannelOrErrorParallel[T any](
 
 				return
 			}
+			if isRecording {
+				span.AddEvent("started streaming")
+			}
 
 			for first := true; true; first = false {
 				select {
@@ -438,6 +460,9 @@ func getChannelOrErrorParallel[T any](
 				case val, ok := <-valueChan:
 					if !ok {
 						return
+					}
+					if isRecording {
+						span.AddEvent("got result")
 					}
 
 					if first {
