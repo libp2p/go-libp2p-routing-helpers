@@ -5,7 +5,6 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p-routing-helpers/internal/tracing"
 	ci "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
@@ -31,7 +30,7 @@ const composeName = "Compose"
 
 // PutValue adds value corresponding to given Key.
 func (cr *Compose) PutValue(ctx context.Context, key string, value []byte, opts ...routing.Option) (err error) {
-	ctx, end := tracing.PutValue(composeName, ctx, key, value, opts...)
+	ctx, end := tracer.PutValue(composeName, ctx, key, value, opts...)
 	defer func() { end(err) }()
 
 	if cr.ValueStore == nil {
@@ -42,7 +41,7 @@ func (cr *Compose) PutValue(ctx context.Context, key string, value []byte, opts 
 
 // GetValue searches for the value corresponding to given Key.
 func (cr *Compose) GetValue(ctx context.Context, key string, opts ...routing.Option) (value []byte, err error) {
-	ctx, end := tracing.GetValue(composeName, ctx, key, opts...)
+	ctx, end := tracer.GetValue(composeName, ctx, key, opts...)
 	defer func() { end(value, err) }()
 
 	if cr.ValueStore == nil {
@@ -53,7 +52,7 @@ func (cr *Compose) GetValue(ctx context.Context, key string, opts ...routing.Opt
 
 // SearchValue searches for the value corresponding to given Key.
 func (cr *Compose) SearchValue(ctx context.Context, key string, opts ...routing.Option) (ch <-chan []byte, err error) {
-	ctx, wrapper := tracing.SearchValue(composeName, ctx, key, opts...)
+	ctx, wrapper := tracer.SearchValue(composeName, ctx, key, opts...)
 	defer func() { ch, err = wrapper(ch, err) }()
 
 	if cr.ValueStore == nil {
@@ -68,7 +67,7 @@ func (cr *Compose) SearchValue(ctx context.Context, key string, opts ...routing.
 // passed, it also announces it, otherwise it is just kept in the local
 // accounting of which objects are being provided.
 func (cr *Compose) Provide(ctx context.Context, c cid.Cid, local bool) (err error) {
-	ctx, end := tracing.Provide(composeName, ctx, c, local)
+	ctx, end := tracer.Provide(composeName, ctx, c, local)
 	defer func() { end(err) }()
 
 	if cr.ContentRouting == nil {
@@ -82,7 +81,7 @@ func (cr *Compose) Provide(ctx context.Context, c cid.Cid, local bool) (err erro
 // If count > 0, it returns at most count providers. If count == 0, it returns
 // an unbounded number of providers.
 func (cr *Compose) FindProvidersAsync(ctx context.Context, c cid.Cid, count int) <-chan peer.AddrInfo {
-	ctx, wrapper := tracing.FindProvidersAsync(composeName, ctx, c, count)
+	ctx, wrapper := tracer.FindProvidersAsync(composeName, ctx, c, count)
 
 	if cr.ContentRouting == nil {
 		ch := make(chan peer.AddrInfo)
@@ -95,7 +94,7 @@ func (cr *Compose) FindProvidersAsync(ctx context.Context, c cid.Cid, count int)
 // FindPeer searches for a peer with given ID, returns a peer.AddrInfo
 // with relevant addresses.
 func (cr *Compose) FindPeer(ctx context.Context, p peer.ID) (info peer.AddrInfo, err error) {
-	ctx, end := tracing.FindPeer(composeName, ctx, p)
+	ctx, end := tracer.FindPeer(composeName, ctx, p)
 	defer func() { end(info, err) }()
 
 	if cr.PeerRouting == nil {
@@ -114,7 +113,7 @@ func (cr *Compose) GetPublicKey(ctx context.Context, p peer.ID) (ci.PubKey, erro
 
 // Bootstrap the router.
 func (cr *Compose) Bootstrap(ctx context.Context) (err error) {
-	ctx, end := tracing.Bootstrap(composeName, ctx)
+	ctx, end := tracer.Bootstrap(composeName, ctx)
 	defer func() { end(err) }()
 
 	// Deduplicate. Technically, calling bootstrap multiple times shouldn't
