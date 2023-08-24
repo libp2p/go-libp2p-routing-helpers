@@ -1,5 +1,5 @@
 // tracing provides high level method tracing for the [routing.Routing] API.
-// Each method
+// Each method of the API has a corresponding method on [Tracer] which return either a defered wrapping callback or just defered callback.
 package tracing
 
 import (
@@ -17,8 +17,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
-	return otel.Tracer("go-libp2p-routing-helpers").Start(ctx, name, opts...)
+// Tracer is the librairy name that will be passed to [otel.Tracer].
+type Tracer string
+
+func (t Tracer) StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	return otel.Tracer(string(t)).Start(ctx, name, opts...)
 }
 
 const base = multibase.Base64url
@@ -40,13 +43,13 @@ func keysAsMultibase(name string, keys []multihash.Multihash) attribute.KeyValue
 	return attribute.StringSlice(name, keysStr)
 }
 
-func Provide(routerName string, ctx context.Context, key cid.Cid, announce bool) (_ context.Context, end func(error)) {
+func (t Tracer) Provide(routerName string, ctx context.Context, key cid.Cid, announce bool) (_ context.Context, end func(error)) {
 	// outline so the concatenation can be folded at compile-time
-	return provide(routerName+".Provide", ctx, key, announce)
+	return t.provide(routerName+".Provide", ctx, key, announce)
 }
 
-func provide(traceName string, ctx context.Context, key cid.Cid, announce bool) (_ context.Context, end func(error)) {
-	ctx, span := StartSpan(ctx, traceName)
+func (t Tracer) provide(traceName string, ctx context.Context, key cid.Cid, announce bool) (_ context.Context, end func(error)) {
+	ctx, span := t.StartSpan(ctx, traceName)
 	if !span.IsRecording() {
 		span.End()
 		return ctx, func(error) {}
@@ -65,13 +68,13 @@ func provide(traceName string, ctx context.Context, key cid.Cid, announce bool) 
 	}
 }
 
-func ProvideMany(routerName string, ctx context.Context, keys []multihash.Multihash) (_ context.Context, end func(error)) {
+func (t Tracer) ProvideMany(routerName string, ctx context.Context, keys []multihash.Multihash) (_ context.Context, end func(error)) {
 	// outline so the concatenation can be folded at compile-time
-	return provideMany(routerName+".ProvideMany", ctx, keys)
+	return t.provideMany(routerName+".ProvideMany", ctx, keys)
 }
 
-func provideMany(traceName string, ctx context.Context, keys []multihash.Multihash) (_ context.Context, end func(error)) {
-	ctx, span := StartSpan(ctx, traceName)
+func (t Tracer) provideMany(traceName string, ctx context.Context, keys []multihash.Multihash) (_ context.Context, end func(error)) {
+	ctx, span := t.StartSpan(ctx, traceName)
 	if !span.IsRecording() {
 		span.End()
 		return ctx, func(error) {}
@@ -99,13 +102,13 @@ func peerInfoToAttributes(p peer.AddrInfo) []attribute.KeyValue {
 	}
 }
 
-func FindProvidersAsync(routerName string, ctx context.Context, key cid.Cid, count int) (_ context.Context, passthrough func(<-chan peer.AddrInfo, error) <-chan peer.AddrInfo) {
+func (t Tracer) FindProvidersAsync(routerName string, ctx context.Context, key cid.Cid, count int) (_ context.Context, passthrough func(<-chan peer.AddrInfo, error) <-chan peer.AddrInfo) {
 	// outline so the concatenation can be folded at compile-time
-	return findProvidersAsync(routerName+".FindProvidersAsync", ctx, key, count)
+	return t.findProvidersAsync(routerName+".FindProvidersAsync", ctx, key, count)
 }
 
-func findProvidersAsync(traceName string, ctx context.Context, key cid.Cid, count int) (_ context.Context, passthrough func(<-chan peer.AddrInfo, error) <-chan peer.AddrInfo) {
-	ctx, span := StartSpan(ctx, traceName)
+func (t Tracer) findProvidersAsync(traceName string, ctx context.Context, key cid.Cid, count int) (_ context.Context, passthrough func(<-chan peer.AddrInfo, error) <-chan peer.AddrInfo) {
+	ctx, span := t.StartSpan(ctx, traceName)
 	if !span.IsRecording() {
 		span.End()
 		return ctx, func(c <-chan peer.AddrInfo, _ error) <-chan peer.AddrInfo { return c }
@@ -140,13 +143,13 @@ func findProvidersAsync(traceName string, ctx context.Context, key cid.Cid, coun
 	}
 }
 
-func FindPeer(routerName string, ctx context.Context, id peer.ID) (_ context.Context, end func(peer.AddrInfo, error)) {
+func (t Tracer) FindPeer(routerName string, ctx context.Context, id peer.ID) (_ context.Context, end func(peer.AddrInfo, error)) {
 	// outline so the concatenation can be folded at compile-time
-	return findPeer(routerName+".FindPeer", ctx, id)
+	return t.findPeer(routerName+".FindPeer", ctx, id)
 }
 
-func findPeer(traceName string, ctx context.Context, id peer.ID) (_ context.Context, end func(peer.AddrInfo, error)) {
-	ctx, span := StartSpan(ctx, traceName)
+func (t Tracer) findPeer(traceName string, ctx context.Context, id peer.ID) (_ context.Context, end func(peer.AddrInfo, error)) {
+	ctx, span := t.StartSpan(ctx, traceName)
 	if !span.IsRecording() {
 		span.End()
 		return ctx, func(peer.AddrInfo, error) {}
@@ -166,13 +169,13 @@ func findPeer(traceName string, ctx context.Context, id peer.ID) (_ context.Cont
 	}
 }
 
-func PutValue(routerName string, ctx context.Context, key string, val []byte, opts ...routing.Option) (_ context.Context, end func(error)) {
+func (t Tracer) PutValue(routerName string, ctx context.Context, key string, val []byte, opts ...routing.Option) (_ context.Context, end func(error)) {
 	// outline so the concatenation can be folded at compile-time
-	return putValue(routerName+".PutValue", ctx, key, val, opts...)
+	return t.putValue(routerName+".PutValue", ctx, key, val, opts...)
 }
 
-func putValue(traceName string, ctx context.Context, key string, val []byte, opts ...routing.Option) (_ context.Context, end func(error)) {
-	ctx, span := StartSpan(ctx, traceName)
+func (t Tracer) putValue(traceName string, ctx context.Context, key string, val []byte, opts ...routing.Option) (_ context.Context, end func(error)) {
+	ctx, span := t.StartSpan(ctx, traceName)
 	if !span.IsRecording() {
 		span.End()
 		return ctx, func(error) {}
@@ -192,13 +195,13 @@ func putValue(traceName string, ctx context.Context, key string, val []byte, opt
 	}
 }
 
-func GetValue(routerName string, ctx context.Context, key string, opts ...routing.Option) (_ context.Context, end func([]byte, error)) {
+func (t Tracer) GetValue(routerName string, ctx context.Context, key string, opts ...routing.Option) (_ context.Context, end func([]byte, error)) {
 	// outline so the concatenation can be folded at compile-time
-	return getValue(routerName+".GetValue", ctx, key, opts...)
+	return t.getValue(routerName+".GetValue", ctx, key, opts...)
 }
 
-func getValue(traceName string, ctx context.Context, key string, opts ...routing.Option) (_ context.Context, end func([]byte, error)) {
-	ctx, span := StartSpan(ctx, traceName)
+func (t Tracer) getValue(traceName string, ctx context.Context, key string, opts ...routing.Option) (_ context.Context, end func([]byte, error)) {
+	ctx, span := t.StartSpan(ctx, traceName)
 	if !span.IsRecording() {
 		span.End()
 		return ctx, func([]byte, error) {}
@@ -222,13 +225,13 @@ func getValue(traceName string, ctx context.Context, key string, opts ...routing
 	}
 }
 
-func SearchValue(routerName string, ctx context.Context, key string, opts ...routing.Option) (_ context.Context, passthrough func(<-chan []byte, error) (<-chan []byte, error)) {
+func (t Tracer) SearchValue(routerName string, ctx context.Context, key string, opts ...routing.Option) (_ context.Context, passthrough func(<-chan []byte, error) (<-chan []byte, error)) {
 	// outline so the concatenation can be folded at compile-time
-	return searchValue(routerName+".SearchValue", ctx, key, opts...)
+	return t.searchValue(routerName+".SearchValue", ctx, key, opts...)
 }
 
-func searchValue(traceName string, ctx context.Context, key string, opts ...routing.Option) (_ context.Context, passthrough func(<-chan []byte, error) (<-chan []byte, error)) {
-	ctx, span := StartSpan(ctx, traceName)
+func (t Tracer) searchValue(traceName string, ctx context.Context, key string, opts ...routing.Option) (_ context.Context, passthrough func(<-chan []byte, error) (<-chan []byte, error)) {
+	ctx, span := t.StartSpan(ctx, traceName)
 	if !span.IsRecording() {
 		span.End()
 		return ctx, func(c <-chan []byte, err error) (<-chan []byte, error) { return c, err }
@@ -265,13 +268,13 @@ func searchValue(traceName string, ctx context.Context, key string, opts ...rout
 	}
 }
 
-func Bootstrap(routerName string, ctx context.Context) (_ context.Context, end func(error)) {
+func (t Tracer) Bootstrap(routerName string, ctx context.Context) (_ context.Context, end func(error)) {
 	// outline so the concatenation can be folded at compile-time
-	return bootstrap(routerName+".Bootstrap", ctx)
+	return t.bootstrap(routerName+".Bootstrap", ctx)
 }
 
-func bootstrap(traceName string, ctx context.Context) (_ context.Context, end func(error)) {
-	ctx, span := StartSpan(ctx, traceName)
+func (t Tracer) bootstrap(traceName string, ctx context.Context) (_ context.Context, end func(error)) {
+	ctx, span := t.StartSpan(ctx, traceName)
 	if !span.IsRecording() {
 		span.End()
 		return ctx, func(error) {}

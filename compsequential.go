@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 
 	"github.com/ipfs/go-cid"
-	"github.com/libp2p/go-libp2p-routing-helpers/internal/tracing"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/multiformats/go-multihash"
@@ -42,7 +41,7 @@ func (r *composableSequential) Routers() []routing.Routing {
 // If some router fails and the IgnoreError flag is true, we continue to the next router.
 // Context timeout error will be also ignored if the flag is set.
 func (r *composableSequential) Provide(ctx context.Context, cid cid.Cid, provide bool) (err error) {
-	ctx, end := tracing.Provide(sequentialName, ctx, cid, provide)
+	ctx, end := tracer.Provide(sequentialName, ctx, cid, provide)
 	defer func() { end(err) }()
 
 	return executeSequential(ctx, r.routers,
@@ -54,7 +53,7 @@ func (r *composableSequential) Provide(ctx context.Context, cid cid.Cid, provide
 // ProvideMany will call all supported Routers sequentially, falling back to iterative
 // single Provide call for routers which do not support [ProvideManyRouter].
 func (r *composableSequential) ProvideMany(ctx context.Context, keys []multihash.Multihash) (err error) {
-	ctx, end := tracing.ProvideMany(sequentialName, ctx, keys)
+	ctx, end := tracer.ProvideMany(sequentialName, ctx, keys)
 	defer func() { end(err) }()
 
 	return executeSequential(ctx, r.routers,
@@ -95,7 +94,7 @@ func (r *composableSequential) Ready() bool {
 // Context timeout error will be also ignored if the flag is set.
 // If count is set, the channel will return up to count results, stopping routers iteration.
 func (r *composableSequential) FindProvidersAsync(ctx context.Context, cid cid.Cid, count int) <-chan peer.AddrInfo {
-	ctx, wrapper := tracing.FindProvidersAsync(sequentialName, ctx, cid, count)
+	ctx, wrapper := tracer.FindProvidersAsync(sequentialName, ctx, cid, count)
 
 	var totalCount int64
 	return wrapper(getChannelOrErrorSequential(ctx, r.routers,
@@ -112,7 +111,7 @@ func (r *composableSequential) FindProvidersAsync(ctx context.Context, cid cid.C
 // If some router fails and the IgnoreError flag is true, we continue to the next router.
 // Context timeout error will be also ignored if the flag is set.
 func (r *composableSequential) FindPeer(ctx context.Context, pid peer.ID) (p peer.AddrInfo, err error) {
-	ctx, end := tracing.FindPeer(sequentialName, ctx, pid)
+	ctx, end := tracer.FindPeer(sequentialName, ctx, pid)
 	defer func() { end(p, err) }()
 
 	return getValueOrErrorSequential(ctx, r.routers,
@@ -126,7 +125,7 @@ func (r *composableSequential) FindPeer(ctx context.Context, pid peer.ID) (p pee
 // If some router fails and the IgnoreError flag is true, we continue to the next router.
 // Context timeout error will be also ignored if the flag is set.
 func (r *composableSequential) PutValue(ctx context.Context, key string, val []byte, opts ...routing.Option) (err error) {
-	ctx, end := tracing.PutValue(sequentialName, ctx, key, val, opts...)
+	ctx, end := tracer.PutValue(sequentialName, ctx, key, val, opts...)
 	defer func() { end(err) }()
 
 	return executeSequential(ctx, r.routers,
@@ -149,7 +148,7 @@ func (r *composableSequential) GetValue(ctx context.Context, key string, opts ..
 // If some router fails and the IgnoreError flag is true, we continue to the next router.
 // Context timeout error will be also ignored if the flag is set.
 func (r *composableSequential) SearchValue(ctx context.Context, key string, opts ...routing.Option) (<-chan []byte, error) {
-	ctx, wrapper := tracing.SearchValue(sequentialName, ctx, key, opts...)
+	ctx, wrapper := tracer.SearchValue(sequentialName, ctx, key, opts...)
 
 	return wrapper(getChannelOrErrorSequential(ctx, r.routers,
 		func(ctx context.Context, r routing.Routing) (<-chan []byte, error) {
@@ -163,7 +162,7 @@ func (r *composableSequential) SearchValue(ctx context.Context, key string, opts
 // If some router fails and the IgnoreError flag is true, we continue to the next router.
 // Context timeout error will be also ignored if the flag is set.
 func (r *composableSequential) Bootstrap(ctx context.Context) (err error) {
-	ctx, end := tracing.Bootstrap(sequentialName, ctx)
+	ctx, end := tracer.Bootstrap(sequentialName, ctx)
 	defer func() { end(err) }()
 
 	return executeSequential(ctx, r.routers,
