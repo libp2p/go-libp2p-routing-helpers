@@ -135,7 +135,11 @@ func (t Tracer) findProvidersAsync(traceName string, ctx context.Context, key ci
 
 			for v := range in {
 				span.AddEvent("found provider", trace.WithAttributes(peerInfoToAttributes(v)...))
-				out <- v
+				select {
+				case out <- v:
+				case <-ctx.Done():
+					span.SetStatus(codes.Error, ctx.Err().Error())
+				}
 			}
 		}()
 
@@ -260,7 +264,11 @@ func (t Tracer) searchValue(traceName string, ctx context.Context, key string, o
 				span.AddEvent("found value", trace.WithAttributes(
 					attribute.String("value", bytesAsMultibase(v))),
 				)
-				out <- v
+				select {
+				case out <- v:
+				case <-ctx.Done():
+					span.SetStatus(codes.Error, ctx.Err().Error())
+				}
 			}
 		}()
 
