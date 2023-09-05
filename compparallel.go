@@ -231,17 +231,23 @@ func getValueOrErrorParallel[T any](
 				ctx, cancel := withCancelAndOptionalTimeout(ctx, r.Timeout)
 				defer cancel()
 				value, empty, err := f(ctx, r.Router)
-				if err != nil &&
-					!errors.Is(err, routing.ErrNotFound) &&
-					!r.IgnoreError {
-					log.Debug("getValueOrErrorParallel: error calling router function for router ", r.Router,
-						" with timeout ", r.Timeout,
-						" and ignore errors ", r.IgnoreError,
-						" with error ", err,
-					)
-					select {
-					case <-ctx.Done():
-					case errCh <- err:
+				if err != nil {
+					if !errors.Is(err, routing.ErrNotFound) &&
+						!r.IgnoreError {
+						log.Debug("getValueOrErrorParallel: error calling router function for router ", r.Router,
+							" with timeout ", r.Timeout,
+							" and ignore errors ", r.IgnoreError,
+							" with error ", err,
+						)
+						select {
+						case <-ctx.Done():
+						case errCh <- err:
+						}
+					} else {
+						log.Debug("getValueOrErrorParallel: not found or ignorable error for router ", r.Router,
+							" with timeout ", r.Timeout,
+							" and ignore errors ", r.IgnoreError,
+						)
 					}
 					return
 				}
