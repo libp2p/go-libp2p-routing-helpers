@@ -308,6 +308,28 @@ func TestComposableParallelFixtures(t *testing.T) {
 				{key: "/wait/100ms/a", value: "av", searchValCount: 1},
 			},
 		},
+		{
+			Name: "Return an error even if routers return data alongside the error",
+			routers: []*ParallelRouter{
+				{
+					Timeout:     0,
+					IgnoreError: true,
+					Router: &Compose{
+						PeerRouting: peerRoutingDataWithError{},
+					},
+				},
+				{
+					Timeout:     time.Second,
+					IgnoreError: true,
+					Router: &Compose{
+						PeerRouting: peerRoutingDataWithError{},
+					},
+				},
+			},
+			FindPeer: []findPeerFixture{
+				{peerID: "pid1", err: routing.ErrNotFound},
+			},
+		},
 	}
 
 	for _, f := range fixtures {
@@ -400,6 +422,12 @@ func TestComposableParallelFixtures(t *testing.T) {
 			}
 		})
 	}
+}
+
+type peerRoutingDataWithError struct{}
+
+func (r peerRoutingDataWithError) FindPeer(ctx context.Context, p peer.ID) (peer.AddrInfo, error) {
+	return peer.AddrInfo{ID: p}, routing.ErrNotFound
 }
 
 func newDummyPeerRouting(t testing.TB, ids []peer.ID) routing.PeerRouting {
