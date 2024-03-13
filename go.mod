@@ -2,7 +2,6 @@ module github.com/libp2p/go-libp2p-routing-helpers
 
 go 1.21
 
-
 require (
 	github.com/Jorropo/jsync v1.0.1
 	github.com/hashicorp/errwrap v1.1.0
