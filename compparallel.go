@@ -3,7 +3,6 @@ package routinghelpers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -387,7 +386,7 @@ func getChannelOrErrorParallel[T any](
 	blocking.Add(1) // start at one so we don't cancel while dispatching
 	var sent atomic.Bool
 
-	for _, r := range routers {
+	for i, r := range routers {
 		ctx, span := tracer.StartSpan(ctx, composeName+".worker")
 		isBlocking := !isSearchValue || !r.DoNotWaitForSearchValue
 		if isBlocking {
@@ -398,7 +397,7 @@ func getChannelOrErrorParallel[T any](
 			span.SetAttributes(
 				attribute.Bool("blocking", isBlocking),
 				attribute.Stringer("type", reflect.TypeOf(r.Router)),
-				attribute.String("string", fmt.Sprint(r.Router)),
+				attribute.Int("routingNumber", i),
 			)
 		}
 
