@@ -3,14 +3,15 @@ package routinghelpers
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	mh "github.com/multiformats/go-multihash"
+	"go.uber.org/multierr"
 )
 
 // NOTE: While this test is primarily testing the Parallel combinator, it also
@@ -99,10 +100,10 @@ func TestParallelPutGet(t *testing.T) {
 	if err := d.PutValue(ctx, "/notsupported/hello", []byte("world")); err != routing.ErrNotSupported {
 		t.Fatalf("expected ErrNotSupported, got: %s", err)
 	}
-	if err := d.PutValue(ctx, "/error/myErr", []byte("world")); !errwrap.Contains(err, "myErr") {
+	if err := d.PutValue(ctx, "/error/myErr", []byte("world")); !errContains(err, "myErr") {
 		t.Fatalf("expected error to contain myErr, got: %s", err)
 	}
-	if _, err := d.GetValue(ctx, "/error/myErr"); !errwrap.Contains(err, "myErr") {
+	if _, err := d.GetValue(ctx, "/error/myErr"); !errContains(err, "myErr") {
 		t.Fatalf("expected error to contain myErr, got: %s", err)
 	}
 	if err := d.PutValue(ctx, "/solo/thing", []byte("value")); err != nil {
@@ -127,6 +128,15 @@ func TestParallelPutGet(t *testing.T) {
 		t.Error(err)
 	}
 	cancel()
+}
+
+func errContains(err error, substr string) bool {
+	for _, e := range multierr.Errors(err) {
+		if strings.Contains(e.Error(), substr) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestParallelPutFailure(t *testing.T) {
