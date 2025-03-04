@@ -4,8 +4,6 @@ go 1.23.0
 
 require (
 	github.com/Jorropo/jsync v1.0.1
-	github.com/hashicorp/errwrap v1.1.0
-	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ipfs/go-cid v0.5.0
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/libp2p/go-libp2p v0.41.0

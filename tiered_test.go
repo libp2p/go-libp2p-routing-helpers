@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/ipfs/go-cid"
 	record "github.com/libp2p/go-libp2p-record"
 	"github.com/libp2p/go-libp2p/core/routing"
@@ -178,11 +177,11 @@ func TestTieredGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := d.GetValue(ctx, "/error/myErr"); !errwrap.Contains(err, "myErr") {
+	if _, err := d.GetValue(ctx, "/error/myErr"); !errContains(err, "myErr") {
 		t.Fatalf("expected error to contain myErr, got: %s", err)
 	}
 
-	if _, err := (Tiered{Routers: []routing.Routing{d.Routers[1]}}).GetValue(ctx, "/error/myErr"); !errwrap.Contains(err, "myErr") {
+	if _, err := (Tiered{Routers: []routing.Routing{d.Routers[1]}}).GetValue(ctx, "/error/myErr"); !errContains(err, "myErr") {
 		t.Fatalf("expected error to contain myErr, got: %s", err)
 	}
 

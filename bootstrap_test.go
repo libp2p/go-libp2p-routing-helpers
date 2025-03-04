@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/libp2p/go-libp2p/core/routing"
 )
 
@@ -152,7 +151,7 @@ func TestBootstrapErr(t *testing.T) {
 	err := d.Bootstrap(ctx)
 	t.Log(err)
 	for _, s := range []string{"err1", "err2", "err3", "err4"} {
-		if !errwrap.Contains(err, s) {
+		if !errContains(err, s) {
 			t.Errorf("expecting error to contain '%s'", s)
 		}
 	}
