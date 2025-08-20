@@ -1,6 +1,6 @@
 module github.com/libp2p/go-libp2p-routing-helpers
 
-go 1.23.0
+go 1.24
 
 require (
 	github.com/Jorropo/jsync v1.0.1
