@@ -43,8 +43,6 @@ type ComposableRouter interface {
 type DHTRouter interface {
 	// GetClosestPeers returns the DHT closest peers to the given peer ID.
 	// If empty, it will use the content router's peer ID
-	// (self). `closerThan` (optional) forces the resulting records to be
-	// closer to `PeerID` than to `closerThan`. `count` specifies how many
-	// records to return ([1,100], with 20 as default when set to 0).
-	GetClosestPeers(ctx context.Context, pid peer.ID, closerThan peer.ID, count int) (<-chan peer.AddrInfo, error)
+	// (self).
+	GetClosestPeers(ctx context.Context, pid peer.ID) (<-chan peer.AddrInfo, error)
 }
