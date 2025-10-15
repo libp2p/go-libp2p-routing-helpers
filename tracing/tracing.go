@@ -45,7 +45,7 @@ func keysAsMultibase(name string, keys []multihash.Multihash) attribute.KeyValue
 
 func (t Tracer) Provide(routerName string, ctx context.Context, key cid.Cid, announce bool) (_ context.Context, end func(error)) {
 	// outline so the concatenation can be folded at compile-time
-	return t.provide(routerName+".Provide", ctx, key, announce)
+	return t.provide(routerName+".Provide", ctx, key, announce) // ProbeLab: don't delete/change key/value without notice
 }
 
 func (t Tracer) provide(traceName string, ctx context.Context, key cid.Cid, announce bool) (_ context.Context, end func(error)) {
@@ -56,7 +56,7 @@ func (t Tracer) provide(traceName string, ctx context.Context, key cid.Cid, anno
 	}
 
 	span.SetAttributes(
-		attribute.Stringer("key", key),
+		attribute.Stringer("key", key), // ProbeLab: don't delete/change key/value without notice
 		attribute.Bool("announce", announce),
 	)
 
