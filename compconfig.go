@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-routing-helpers/tracing"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
@@ -44,5 +45,5 @@ type DHTRouter interface {
 	// GetClosestPeers returns the DHT closest peers to the given peer ID.
 	// If empty, it will use the content router's peer ID
 	// (self).
-	GetClosestPeers(ctx context.Context, pid peer.ID) (<-chan peer.AddrInfo, error)
+	GetClosestPeers(ctx context.Context, key cid.Cid) (<-chan peer.AddrInfo, error)
 }
